@@ -1,0 +1,533 @@
+#!/usr/bin/perl
+#
+# Copyright 2013 Timo Benk
+# 
+# This file is part of nrun.
+# 
+# nrun is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# nrun is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with nrun.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Program: ncopy
+# Author:  Timo Benk <benk@b1-systems.de>
+# Date:    Wed May 8 13:46:36 2013 +0200
+# Ident:   31a16b3e65edd6e679b461c0e27ea92a8b373c24
+# Branch:  master
+#
+# Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
+# 
+# Timo Benk : 2013-04-29 18:53:21 +0200 : introducing ncopy
+# Timo Benk : 2013-04-29 19:02:10 +0200 : use Net::Ping instead of the command ping
+# Timo Benk : 2013-04-29 20:39:37 +0200 : File::HomeDir dependency removed
+# Timo Benk : 2013-05-04 07:13:02 +0200 : hostnames can be given at the commandline
+# Timo Benk : 2013-05-05 18:37:46 +0200 : pod docs moved into the code files
+# Timo Benk : 2013-05-05 18:41:11 +0200 : modules were not found when INSTALL_BASE was set
+# Timo Benk : 2013-05-06 09:04:16 +0200 : argument --version added
+# Timo Benk : 2013-05-07 13:15:33 +0200 : package name changed for CPAN
+# Timo Benk : 2013-05-08 10:05:39 +0200 : better signal handling implemented
+#
+
+package App::ncopy;
+
+use strict;
+use warnings;
+
+use FindBin;
+use lib "$FindBin::Bin/../lib";
+use lib "$FindBin::Bin/../lib/perl5";
+
+use File::Path;
+use File::Basename;
+use Date::Format;
+use Getopt::Long;
+use Net::Ping;
+use POSIX qw(getuid);
+
+use NRun::Version;
+use NRun::Worker;
+use NRun::Dumper;
+use NRun::Logger;
+use NRun::Dispatcher;
+
+our $options = {};
+
+###
+# dump a short usage info to stdout.
+sub usage {
+
+    print "usage: " . basename($0) . " -s <SRC> -d <DST> [-h <HOSTS>] <HOST1> <HOST2> ...\n";
+    print "--hosts-file,-h <HOSTS>    file containing the target hosts (one host per line).\n";
+    print "--source,-s <SRC>          the file to be copied.\n";
+    print "--destination,-d <DST>     destination the file should be copied to.\n";
+    print "--parallel,-p <MAX>        number of parallel connections (defaults to 5).\n";
+    print "--dump-results             instead of dumping the command output, dump the exit status.\n";
+    print "--log-directory,-l <DIR>   base directory for the log files.\n";
+    print "--timeout,-t <SEC>         timeout for each command execution (defaults to 60).\n";
+    print "--version                  print the version string and exit.\n";
+    print "--no-hostname              omit hostname prefix.\n";
+    print "--no-logfile               do not generate any log files.\n";
+    print "--skip-ping-check          skip checking if the host answers on ping.\n";
+    print "--skip-ns-check            skip checking if the hostname is resolvable.\n";
+    print "--mode <MODE>              remote execution mode:\n";
+
+    foreach my $object (values(%{NRun::Worker::workers()})) {
+
+        print "                           " . $object->mode() . " - " . $object->desc() ."\n";
+    }
+
+    exit;
+}
+
+###
+# parse the commandline.
+sub parse_commandline {
+
+    my $arg_hosts_file      = $options->{arg_hosts_file};
+    my $arg_parallel        = $options->{arg_parallel};
+    my $arg_source          = $options->{arg_source};
+    my $arg_destination     = $options->{arg_destination};
+    my $arg_dump_results    = $options->{arg_dump_results};
+    my $arg_no_hostname     = $options->{arg_no_hostname};
+    my $arg_no_logfile      = $options->{arg_no_logfile};
+    my $arg_log_directory   = $options->{arg_log_directory};
+    my $arg_mode            = $options->{arg_mode};
+    my $arg_skip_ping_check = $options->{arg_skip_ping_check};
+    my $arg_skip_ns_check   = $options->{arg_skip_ns_check};
+    my $arg_timeout         = $options->{arg_timeout};
+    my $arg_version         = $options->{arg_version};
+
+    my $ret = GetOptions (
+        "hosts-file|h=s"    => \$arg_hosts_file,
+        "parallel|p=i"      => \$arg_parallel,
+        "source|s=s"        => \$arg_source,
+        "destination|d=s"   => \$arg_destination,
+        "no-hostname"       => \$arg_no_hostname,
+        "dump-results"      => \$arg_dump_results,
+        "log-directory|l=s" => \$arg_log_directory,
+        "timeout|t=i"       => \$arg_timeout,
+        "no-logfile"        => \$arg_no_logfile,
+        "mode|m=s"          => \$arg_mode,
+        "skip-ping-check"   => \$arg_skip_ping_check,
+        "skip-ns-check"     => \$arg_skip_ns_check,
+        "version"           => \$arg_version,
+    );
+
+    usage() if (not $ret);
+
+    if (defined($arg_version)) {
+
+        print basename($0) .  " " . $NRun::Version::VERSION . "\n";
+        exit(0);
+    }
+
+    if (not defined($arg_source)) {
+
+        print "error: parameter --source is mandatory.\n";
+        usage();
+    }
+
+    if (not defined($arg_destination)) {
+
+        print "error: parameter --destination is mandatory.\n";
+        usage();
+    }
+
+    if (not defined($arg_mode)) {
+
+        print "error: parameter --mode is mandatory.\n";
+        usage();
+    }
+
+    my $date = time2str("%Y%m%d_%H_%M_%S", time);
+
+    $options->{hosts_file}      = $arg_hosts_file;
+    $options->{parallel}        = $arg_parallel;
+    $options->{source}          = $arg_source;
+    $options->{destination}     = $arg_destination;
+    $options->{timeout}         = $arg_timeout;
+    $options->{no_logfile}      = $arg_no_logfile;
+    $options->{skip_ns_check}   = $arg_skip_ns_check;
+    $options->{skip_ping_check} = $arg_skip_ping_check;
+    $options->{mode}            = lc($arg_mode);
+
+    $options->{dump} = "output";
+    if (defined($arg_dump_results)) {
+    
+        $options->{dump} = "result";
+    } elsif (defined($arg_no_hostname)) {
+
+        $options->{dump} = "output_no_hostname";
+    }
+
+    $options->{log_directory} = "copy/" . $date;
+    if (defined($arg_log_directory)) {
+
+        $options->{log_directory} = "$arg_log_directory/$options->{log_directory}";
+    } else {
+
+        $options->{log_directory} = home() . "/.nrun/$options->{log_directory}";
+    }
+
+    if ($options->{parallel} < 1) {
+
+        print "error: parameter --parallel must be bigger than 1.\n";
+        usage();
+    }
+
+    $options->{hosts} = \@ARGV ;
+    if (defined($arg_hosts_file)) {
+    
+        $options->{hosts} = [ read_hosts($arg_hosts_file), @ARGV ];
+    }
+
+    if (scalar(@{$options->{hosts}}) == 0) {
+
+        print "error: no hostnames given.\n";
+        usage();
+    }
+}
+
+###
+# return users home directory
+#
+# <- the current users home directory
+sub home {
+
+    my $home = (getpwuid(getuid()))[7];
+}
+
+###
+# read the hosts file.
+#
+# $_file - the file containing the hostnames, one per line
+# <- an array containing all hostnames
+sub read_hosts {
+
+    my $_file = shift;
+
+    my $hosts = {};
+
+    open(HOSTS, "<$_file") or die("Cannot open $_file: $!");
+    foreach my $host (<HOSTS>) {
+
+        chomp($host);
+        $host =~ s/^\s+//;
+        $host =~ s/\s+$//;
+
+        if (not $host =~ /^ *$/) {
+
+            # filter out duplicate entries
+            $hosts->{$host} = 1;
+        }
+    }
+
+    return keys(%$hosts);
+}
+
+###
+# callback function used by the dispatcher
+sub callback_action {
+    
+    my $_host = shift;
+
+    if (not (defined($options->{skip_ns_check}) or gethostbyname($_host))) {
+
+        return (-254, "dns entry is missing");
+    }
+
+    if (not (defined($options->{skip_ping_check}) or Net::Ping->new()->ping($_host))) {
+
+        return (-253, "not pinging");
+    }
+
+    return NRun::Worker::workers()->{$options->{mode}}->copy($_host, $options->{source}, $options->{destination});
+}
+
+###
+# callback function used by the dispatcher
+sub callback_result {
+
+    my $_host   = shift;
+    my $_return = shift;
+    my $_output = shift;
+
+    my $dumper = NRun::Dumper->new (
+        {
+            dump => $options->{dump},
+        }
+    );
+
+    $dumper->dump($_host, $_return, $_output);
+
+    my $logger = NRun::Logger->new (
+        {
+            basedir => $options->{log_directory},
+        }
+    );
+
+    $logger->log($_host, $_return, $_output) if (not defined($options->{no_logfile}));
+}
+
+##
+# read configuration files
+#
+# $_files - the files to be read (values in last file will overwrite values in first file)
+sub read_config_files {
+
+    my $_files = shift;
+
+    foreach my $file (@$_files) {
+  
+        if (-e $file) {
+  
+            require $file;
+        }
+    }
+}
+
+###
+# main
+sub main {
+
+    read_config_files (
+        [
+            "$FindBin::Bin/../etc/nrun.config",
+            "/etc/nrun.config",
+            home() . "/.nrun.config" 
+        ]
+    );
+
+    NRun::Worker::load_modules($options);
+
+    parse_commandline();
+
+    my $dispatcher = NRun::Dispatcher->new (
+        {
+            nmax    => $options->{parallel},
+            timeout => $options->{timeout},
+            objects => $options->{hosts},
+    
+            callback_action => \&callback_action,
+            callback_result => \&callback_result,
+        }
+    );
+
+    $dispatcher->run();
+}
+
+main();
+
+__END__
+
+=pod
+
+=head1 NAME
+
+ncopy - copy a file or directory to multiple target servers.
+
+=head1 SYNOPSIS
+
+ncopy -s SRC -d DST [-h HOSTS] [-p MAX] [-l DIR] [-t SEC]
+[--mode MODE] [--dump-results] [--no-hostname] [--no-logfile]
+[--skip-ping-check] [--skip-ns-check] [--version] HOST1 HOST2 ...
+
+=head1 DESCRIPTION
+
+ncopy will copy a file or directory to multiple target servers.
+
+the underlying remote access mechanism is exchangeable. as of now, ssh, nsh, rsh
+and local execution modes are implemented.
+
+=head1 CONFIGURATION
+
+special configuration options for the different modes and additional all
+commandline options can be given in a configuration file.
+
+the following three places will be searched for configuration files (values in the last
+configuration file will overwrite values in the first configuration file):
+
+- $FindBin::Bin/../etc/nrun.config
+
+- /etc/nrun.config
+
+- $HOME/.nrun.config
+
+	###
+	# global options
+	$options->{ssh_binary}   = "/usr/bin/ssh";
+	$options->{scp_binary}   = "/usr/bin/scp";
+	$options->{ssh_args}     = "-o PreferredAuthentications=publickey";
+	$options->{ssh_user}     = "root";
+	$options->{scp_args}     = "-o PreferredAuthentications=publickey";
+	$options->{scp_user}     = "root";
+	$options->{arg_mode}     = "ssh";
+	$options->{arg_parallel} = 5;
+	$options->{arg_timeout}  = 60;
+	
+	1;
+
+=head1 LOGGING
+
+on each execution run, the command output and exit code will be saved inside the
+logging directory. the default logging directory is $HOME/.nrun.
+
+- $LOGDIR/results.log - will contain the exit codes
+
+- $LOGDIR/output.log - will contain the complete command output for all hosts
+
+- $LOGDIR/hosts/HOSTNAME.log - will contain the command output for a single host
+
+=head1 MODES
+
+=head2 mode ssh
+
+use ssh as the underlying remote access mechanism.
+
+the following configuration options must be set in the configuration file:
+
+'ssh_args'   - arguments supplied to the ssh binary
+
+'scp_args'   - arguments supplied to the scp binary
+
+'ssh_binary' - ssh binary to be executed
+
+'scp_binary' - scp binary to be executed
+
+'ssh_user'   - ssh login user
+
+'scp_user'   - scp login user
+
+for passwordless login ssh-agent can be used:
+
+	# ssh-keygen
+	# scp .ssh/id_rsa.pub $USER@$HOST:.ssh/authorized_keys
+
+	# eval `ssh-agent`
+	# ssh-add
+
+to prevent any ssh interaction the following ssh command paramters are
+suggested:
+
+	-o PreferredAuthentications=hostbased,publickey
+	-o StrictHostKeyChecking=no
+	-o UserKnownHostsFile=/dev/null
+	-q
+
+=head2 mode local
+
+execute the script locally for each host and set the environment variable
+TARGET_HOST on each execution.
+
+=head2 mode nsh
+
+use nsh as the underlying remote access mechanism.
+
+the following configuration options must be set in the configuration file:
+
+'agentinfo_args'   - arguments supplied to the agentinfo binary
+
+'nexec_args'       - arguments supplied to the nexec binary
+
+'ncp_args'         - arguments supplied to the ncp binary
+
+'agentinfo_binary' - agentinfo binary to be executed
+
+'nexec_binary'     - nexec binary to be executed
+
+'ncp_binary'       - ncp binary to be executed
+
+=head2 mode rsh
+
+use rsh as the underlying remote access mechanism.
+
+the following configuration options must be set in the configuration file:
+
+'rsh_args'   - arguments supplied to the rsh binary
+
+'rcp_args'   - arguments supplied to the rcp binary
+
+'rsh_binary' - rsh binary to be executed
+
+'rcp_binary' - rcp binary to be executed
+
+'rsh_user'   - rsh login user
+
+'rcp_user'   - rcp login user
+
+=head1 OPTIONS
+
+B<--source,-s SRC>         the file to be copied.
+
+B<--destination,-d DST>    destination the file should be copied to.
+
+B<--hosts-file,-h HOSTS>   file containing the target hosts (one host per line).
+
+B<--parallel,-p MAX>       number of parallel connections (defaults to 5).
+
+B<--dump-results>          instead of dumping the command output, dump the exit status.
+
+B<--log-directory,-l DIR>  base directory for the log files.
+
+B<--timeout,-t SEC>        timeout for each command execution (defaults to 60).
+
+B<--no-hostname>           omit hostname prefix.
+
+B<--no-logfile>            do not generate any log files.
+
+B<--skip-ping-check>       skip checking if the host answers on ping.
+
+B<--skip-ns-check>         skip checking if the hostname is resolvable.
+
+B<--version>               print the version string and exit.
+
+B<--mode MODE>             remote execution mode (see MODES)
+
+=head1 EXAMPLES
+
+1. copy file test.tar to host1, host2 and all hosts in the file <HOSTS.LST>
+
+	$ ncopy --hosts-file <HOSTS.LST> --source test.tar --destination /tmp host1 host2
+
+=head1 NOTES
+
+=head2 inspecting long running processes
+
+it is possible to signal nrun with USR1 and USR2 to dump, resp. save the currently
+running processes. if nrun is signaled with USR2, it will create a file in
+the directory it was started in called trace.txt.
+
+the integer in square brackets is the pid of the perl process and the integer in
+round brackets is the pid of the executed process.
+
+        $ kill -USR1 1234
+        [14760]: (14761) TARGET_HOST=localhost /tmp/test.sh
+        [14760]: 1
+        [14760]: 2
+        [14756]: (14757) TARGET_HOST=qn439 /tmp/test.sh
+        [14756]: 1
+        [14756]: 2
+
+=head2 transferring the public key
+
+the helper script misc/put_pubkey can be used to transfer the ssh public key
+to the target hosts without supplying a password for each login. it is meant
+to be executed by the nrun script in mode local.
+
+	$ nrun -h <HOSTS.LST> -c ./put_pubkey -a "<KEY> <USER> <PWD>" --mode local -t 120
+
+=head1 AUTHOR
+
+Timo Benk <benk@b1-systems.de>
+
+=head1 SEE ALSO
+
+nrun(1), dsh(1)
