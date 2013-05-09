@@ -17,23 +17,13 @@
 # You should have received a copy of the GNU General Public License
 # along with nrun.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Program: ncopy
-# Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Wed May 8 13:46:36 2013 +0200
-# Ident:   31a16b3e65edd6e679b461c0e27ea92a8b373c24
-# Branch:  master
+# Program: <FILE>
+# Author:  <AUTHORNAME> <<AUTHOREMAIL>>
+# Date:    <COMMITTERDATE>
+# Ident:   <COMMITHASH>
+# Branch:  <BRANCH>
 #
-# Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
-# 
-# Timo Benk : 2013-04-29 18:53:21 +0200 : introducing ncopy
-# Timo Benk : 2013-04-29 19:02:10 +0200 : use Net::Ping instead of the command ping
-# Timo Benk : 2013-04-29 20:39:37 +0200 : File::HomeDir dependency removed
-# Timo Benk : 2013-05-04 07:13:02 +0200 : hostnames can be given at the commandline
-# Timo Benk : 2013-05-05 18:37:46 +0200 : pod docs moved into the code files
-# Timo Benk : 2013-05-05 18:41:11 +0200 : modules were not found when INSTALL_BASE was set
-# Timo Benk : 2013-05-06 09:04:16 +0200 : argument --version added
-# Timo Benk : 2013-05-07 13:15:33 +0200 : package name changed for CPAN
-# Timo Benk : 2013-05-08 10:05:39 +0200 : better signal handling implemented
+# <CHANGELOG:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s>
 #
 
 package App::ncopy;
@@ -262,7 +252,8 @@ sub callback_result {
 
     my $dumper = NRun::Dumper->new (
         {
-            dump => $options->{dump},
+            dump      => $options->{dump},
+            semaphore => $options->{sem_dumper},
         }
     );
 
@@ -270,7 +261,8 @@ sub callback_result {
 
     my $logger = NRun::Logger->new (
         {
-            basedir => $options->{log_directory},
+            basedir   => $options->{log_directory},
+            semaphore => $options->{sem_logger},
         }
     );
 
@@ -306,7 +298,11 @@ sub main {
         ]
     );
 
-    NRun::Worker::load_modules($options);
+    $options->{sem_logger} = NRun::Semaphore->new();
+    $options->{sem_dumper} = NRun::Semaphore->new();
+    $options->{sem_worker} = NRun::Semaphore->new();
+
+    NRun::Worker::init($options, $options->{sem_worker});
 
     parse_commandline();
 
@@ -325,6 +321,13 @@ sub main {
 }
 
 main();
+
+END {
+
+    $options->{sem_logger}->delete();
+    $options->{sem_dumper}->delete();
+    $options->{sem_worker}->delete();
+}
 
 __END__
 

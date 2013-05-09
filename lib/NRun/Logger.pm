@@ -16,15 +16,13 @@
 # You should have received a copy of the GNU General Public License
 # along with nrun.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Program: Logger.pm
-# Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Wed May 8 13:46:36 2013 +0200
-# Ident:   31a16b3e65edd6e679b461c0e27ea92a8b373c24
-# Branch:  master
+# Program: <FILE>
+# Author:  <AUTHORNAME> <<AUTHOREMAIL>>
+# Date:    <COMMITTERDATE>
+# Ident:   <COMMITHASH>
+# Branch:  <BRANCH>
 #
-# Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
-# 
-# Timo Benk : 2013-04-28 17:27:31 +0200 : initial checkin
+# <CHANGELOG:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s>
 #
 
 package NRun::Logger;
@@ -35,14 +33,13 @@ use warnings;
 use File::Path;
 use NRun::Semaphore;
 
-my $SEMAPHORE = NRun::Semaphore->new({key => int(rand(100000))});
-
 ###
 # create a new object.
 #
 # $_obj - parameter hash where
 # {
-#   'basedir' - the basedir the logs should be written to
+#   'basedir'   - the basedir the logs should be written to
+#   'semaphore' - the semaphore lock object
 # }
 # <- the new object
 sub new {
@@ -53,7 +50,8 @@ sub new {
     my $self = {};
     bless $self, $_pkg;
 
-    $self->{basedir} = $_obj->{basedir};
+    $self->{basedir}   = $_obj->{basedir};
+    $self->{semaphore} = $_obj->{semaphore};
 
     mkpath("$self->{basedir}/hosts");
 
@@ -76,7 +74,7 @@ sub log {
     my $_ret  = shift;
     my $_out  = shift;
 
-    $SEMAPHORE->lock();
+    $_self->{semaphore}->lock();
 
     open(RES, ">>$_self->{basedir}/results.log")
       or die("$_self->{basedir}/results.log: $!");
@@ -102,7 +100,7 @@ sub log {
     close(RES);
     close(LOG);
 
-    $SEMAPHORE->unlock();
+    $_self->{semaphore}->unlock();
 }
 
 1;

@@ -16,17 +16,13 @@
 # You should have received a copy of the GNU General Public License
 # along with nrun.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Program: Dispatcher.pm
-# Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Wed May 8 13:46:36 2013 +0200
-# Ident:   31a16b3e65edd6e679b461c0e27ea92a8b373c24
-# Branch:  master
+# Program: <FILE>
+# Author:  <AUTHORNAME> <<AUTHOREMAIL>>
+# Date:    <COMMITTERDATE>
+# Ident:   <COMMITHASH>
+# Branch:  <BRANCH>
 #
-# Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
-# 
-# Timo Benk : 2013-04-28 17:27:31 +0200 : initial checkin
-# Timo Benk : 2013-05-08 09:48:13 +0200 : misplaced brace made callback_action() mandatory
-# Timo Benk : 2013-05-08 10:05:39 +0200 : better signal handling implemented
+# <CHANGELOG:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s>
 #
 
 package NRun::Dispatcher;
@@ -133,10 +129,10 @@ sub run {
 
     my (@pool, %pids);
 
-    $SIG{USR1} = sub { kill(10, keys(%pids)); };
-    $SIG{USR2} = sub { kill(12, keys(%pids)); };
-    $SIG{INT}  = sub { kill(2,  keys(%pids)); exit; };
-    $SIG{TERM} = sub { kill(15, keys(%pids)); exit; };
+    $SIG{USR1} = sub { kill(USR1 => keys(%pids)); };
+    $SIG{USR2} = sub { kill(USR2 => keys(%pids)); };
+    $SIG{INT}  = sub { kill(INT  => keys(%pids)); exit; };
+    $SIG{TERM} = sub { kill(TERM => keys(%pids)); exit; };
 
     # rampup
     while (scalar(@pool) < $_self->{nmax} and scalar(@{$_self->{objects}}) > 0) {

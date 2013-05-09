@@ -16,15 +16,13 @@
 # You should have received a copy of the GNU General Public License
 # along with nrun.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Program: Dumper.pm
-# Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Wed May 8 13:46:36 2013 +0200
-# Ident:   31a16b3e65edd6e679b461c0e27ea92a8b373c24
-# Branch:  master
+# Program: <FILE>
+# Author:  <AUTHORNAME> <<AUTHOREMAIL>>
+# Date:    <COMMITTERDATE>
+# Ident:   <COMMITHASH>
+# Branch:  <BRANCH>
 #
-# Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
-# 
-# Timo Benk : 2013-04-28 17:27:31 +0200 : initial checkin
+# <CHANGELOG:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s>
 #
 
 package NRun::Dumper;
@@ -34,17 +32,16 @@ use warnings;
 
 use NRun::Semaphore;
 
-my $SEMAPHORE = NRun::Semaphore->new({key => int(rand(100000))});
-
 ###
 # create a new object.
 #
 # $_obj - parameter hash where
 # {
-#   'dump' - one of ...
-#            output             - dump the command output 
-#            result             - dump the command result in csv format
-#            output_no_hostname - dump the command output out omit the hostname
+#   'dump'      - one of ...
+#                 output             - dump the command output 
+#                 result             - dump the command result in csv format
+#                 output_no_hostname - dump the command output out omit the hostname
+#   'semaphore' - the semaphore lock object
 # }
 # <- the new object
 sub new {
@@ -55,7 +52,8 @@ sub new {
     my $self = {};
     bless $self, $_pkg;
 
-    $self->{dump} = $_obj->{dump};
+    $self->{dump}      = $_obj->{dump};
+    $self->{semaphore} = $_obj->{semaphore};
 
     return $self;
 }
@@ -88,9 +86,9 @@ sub dump {
         $_out =  "$_host; exit code $_ret\n";
     }
 
-    $SEMAPHORE->lock();
+    $_self->{semaphore}->lock();
     print $_out;
-    $SEMAPHORE->unlock();
+    $_self->{semaphore}->unlock();
 }
 
 1;

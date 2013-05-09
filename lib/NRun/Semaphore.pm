@@ -16,16 +16,13 @@
 # You should have received a copy of the GNU General Public License
 # along with nrun.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Program: Semaphore.pm
-# Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Wed May 8 13:46:36 2013 +0200
-# Ident:   31a16b3e65edd6e679b461c0e27ea92a8b373c24
-# Branch:  master
+# Program: <FILE>
+# Author:  <AUTHORNAME> <<AUTHOREMAIL>>
+# Date:    <COMMITTERDATE>
+# Ident:   <COMMITHASH>
+# Branch:  <BRANCH>
 #
-# Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
-# 
-# Timo Benk : 2013-04-28 17:27:31 +0200 : initial checkin
-# Timo Benk : 2013-05-08 09:47:24 +0200 : locking implementation was broken
+# <CHANGELOG:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s>
 #
 
 package NRun::Semaphore;
@@ -37,18 +34,12 @@ use IPC::Semaphore;
 use IPC::SysV qw(IPC_CREAT);
 use Time::HiRes qw(usleep);
 
-# ensure DESTROY() is called
-$SIG{INT}  = sub { die("caught SIGINT\n")  };
-$SIG{TERM} = sub { die("caught SIGTERM\n") }; 
-$SIG{ABRT} = sub { die("caught SIGABRT\n") }; 
-$SIG{QUIT} = sub { die("caught SIGQUIT\n") }; 
-
 ###
 # create a new object.
 #
 # $_obj - parameter hash where
 # {
-#   'key' => semaphore key
+#   'key' => semaphore key or undef if a new unique semaphore should be created
 # }
 # <- the new object
 sub new {
@@ -59,10 +50,21 @@ sub new {
     my $self = {};
     bless $self, $_pkg;
 
-    $self->{key} = $_obj->{key};
+    if (not defined($_obj) or not defined($_obj->{key})) {
 
-    $self->{semaphore} = new IPC::Semaphore($self->{key}, 1, 0777 | IPC_CREAT);
-    $self->{semaphore}->op(0,1,0);
+        $self->{key} = int(rand(100000));
+        while (new IPC::Semaphore($self->{key}, 1, 0)) {
+
+            $self->{key} = int(rand(100000));
+        }
+
+        $self->{semaphore} = new IPC::Semaphore($self->{key}, 1, 0600 | IPC_CREAT);
+        $self->{semaphore}->op(0,1,0);
+    } else {
+
+        $self->{key} = $_obj->{key};
+        $self->{semaphore} = new IPC::Semaphore($self->{key}, 1, 0);
+    }
 
     return $self;
 }
@@ -91,14 +93,14 @@ sub unlock {
 
 ###
 # remove the semaphore.
-sub DESTROY {
+sub delete {
 
     my $_self = shift;
 
-    # $self->{semaphore} is undef in DESTROY() - recreate the semaphore for deletion
-    $_self->{semaphore} = new IPC::Semaphore($_self->{key}, 1, 0777 | IPC_CREAT);
+    if (defined($_self->{semaphore})) {
 
-    $_self->{semaphore}->remove() if (defined($_self->{semaphore}));
+        $_self->{semaphore}->remove();
+    }
 }
 
 1;
