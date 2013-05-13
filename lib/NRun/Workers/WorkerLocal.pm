@@ -16,13 +16,17 @@
 # You should have received a copy of the GNU General Public License
 # along with nrun.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Program: <FILE>
-# Author:  <AUTHORNAME> <<AUTHOREMAIL>>
-# Date:    <COMMITTERDATE>
-# Ident:   <COMMITHASH>
-# Branch:  <BRANCH>
+# Program: WorkerLocal.pm
+# Author:  Timo Benk <benk@b1-systems.de>
+# Date:    Mon May 13 18:54:32 2013 +0200
+# Ident:   beeacd63b3b9e6fe986adc9c52feb80ebaf984d8
+# Branch:  master
 #
-# <CHANGELOG:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s>
+# Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
+# 
+# Timo Benk : 2013-04-28 17:27:31 +0200 : initial checkin
+# Timo Benk : 2013-04-29 18:53:21 +0200 : introducing ncopy
+# Timo Benk : 2013-05-08 09:55:24 +0200 : TARGET_HOST is now visible in ps output
 #
 
 package WorkerLocal;

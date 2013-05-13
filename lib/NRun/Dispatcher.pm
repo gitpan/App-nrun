@@ -16,13 +16,19 @@
 # You should have received a copy of the GNU General Public License
 # along with nrun.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Program: <FILE>
-# Author:  <AUTHORNAME> <<AUTHOREMAIL>>
-# Date:    <COMMITTERDATE>
-# Ident:   <COMMITHASH>
-# Branch:  <BRANCH>
+# Program: Dispatcher.pm
+# Author:  Timo Benk <benk@b1-systems.de>
+# Date:    Mon May 13 18:54:32 2013 +0200
+# Ident:   beeacd63b3b9e6fe986adc9c52feb80ebaf984d8
+# Branch:  master
 #
-# <CHANGELOG:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s>
+# Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
+# 
+# Timo Benk : 2013-04-28 17:27:31 +0200 : initial checkin
+# Timo Benk : 2013-05-08 09:48:13 +0200 : misplaced brace made callback_action() mandatory
+# Timo Benk : 2013-05-08 10:05:39 +0200 : better signal handling implemented
+# Timo Benk : 2013-05-08 15:11:24 +0200 : use symbolic names in kill()
+# Timo Benk : 2013-05-13 15:58:07 +0200 : child processes died before the result was handled
 #
 
 package NRun::Dispatcher;

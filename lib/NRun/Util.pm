@@ -17,13 +17,15 @@
 # You should have received a copy of the GNU General Public License
 # along with nrun.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Program: <FILE>
-# Author:  <AUTHORNAME> <<AUTHOREMAIL>>
-# Date:    <COMMITTERDATE>
-# Ident:   <COMMITHASH>
-# Branch:  <BRANCH>
+# Program: Util.pm
+# Author:  Timo Benk <benk@b1-systems.de>
+# Date:    Mon May 13 18:54:32 2013 +0200
+# Ident:   beeacd63b3b9e6fe986adc9c52feb80ebaf984d8
+# Branch:  master
 #
-# <CHANGELOG:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s>
+# Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
+# 
+# Timo Benk : 2013-05-13 11:12:49 +0200 : commandline syntax simplified
 #
 
 package NRun::Util;

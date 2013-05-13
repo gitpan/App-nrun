@@ -16,13 +16,20 @@
 # You should have received a copy of the GNU General Public License
 # along with nrun.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Program: <FILE>
-# Author:  <AUTHORNAME> <<AUTHOREMAIL>>
-# Date:    <COMMITTERDATE>
-# Ident:   <COMMITHASH>
-# Branch:  <BRANCH>
+# Program: Semaphore.pm
+# Author:  Timo Benk <benk@b1-systems.de>
+# Date:    Mon May 13 18:54:32 2013 +0200
+# Ident:   beeacd63b3b9e6fe986adc9c52feb80ebaf984d8
+# Branch:  master
 #
-# <CHANGELOG:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s>
+# Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
+# 
+# Timo Benk : 2013-04-28 17:27:31 +0200 : initial checkin
+# Timo Benk : 2013-05-08 09:47:24 +0200 : locking implementation was broken
+# Timo Benk : 2013-05-09 07:31:52 +0200 : fix race condition in semaphore cleanup code
+# Timo Benk : 2013-05-09 09:24:01 +0200 : no possibility to determine the semaphore key
+# Timo Benk : 2013-05-09 10:55:29 +0200 : race condition fixed
+# Timo Benk : 2013-05-09 16:35:45 +0200 : last commit reverted
 #
 
 package NRun::Semaphore;

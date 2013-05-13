@@ -19,4 +19,4 @@ no_index:
     - inc
 requires:
   Date::Format: 0
-version: v1.0.0_3
+version: v1.0.0_4
