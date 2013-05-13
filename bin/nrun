@@ -17,30 +17,13 @@
 # You should have received a copy of the GNU General Public License
 # along with nrun.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Program: nrun
-# Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Thu May 9 08:08:32 2013 +0200
-# Ident:   03a00d9a9995d1ad059b127162589f3bdcebc8cc
-# Branch:  master
+# Program: <FILE>
+# Author:  <AUTHORNAME> <<AUTHOREMAIL>>
+# Date:    <COMMITTERDATE>
+# Ident:   <COMMITHASH>
+# Branch:  <BRANCH>
 #
-# Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
-# 
-# Timo Benk : 2013-04-28 17:27:31 +0200 : initial checkin
-# Timo Benk : 2013-04-28 20:02:52 +0200 : options --skip-ping-check and --skip-ns-check added
-# Timo Benk : 2013-04-28 22:01:00 +0200 : ping and ns check moved into Main::callback_action
-# Timo Benk : 2013-04-29 09:19:02 +0200 : missing include Net::Ping added
-# Timo Benk : 2013-04-29 18:53:21 +0200 : introducing ncopy
-# Timo Benk : 2013-04-29 19:02:10 +0200 : use Net::Ping instead of the command ping
-# Timo Benk : 2013-04-29 20:39:37 +0200 : File::HomeDir dependency removed
-# Timo Benk : 2013-05-04 07:13:02 +0200 : hostnames can be given at the commandline
-# Timo Benk : 2013-05-04 14:32:58 +0200 : temporary filename should be unpredictable
-# Timo Benk : 2013-05-05 18:37:46 +0200 : pod docs moved into the code files
-# Timo Benk : 2013-05-05 18:41:11 +0200 : modules were not found when INSTALL_BASE was set
-# Timo Benk : 2013-05-06 09:04:16 +0200 : argument --version added
-# Timo Benk : 2013-05-07 13:15:33 +0200 : package name changed for CPAN
-# Timo Benk : 2013-05-08 10:05:39 +0200 : better signal handling implemented
-# Timo Benk : 2013-05-09 07:31:52 +0200 : fix race condition in semaphore cleanup code
-# Timo Benk : 2013-05-09 07:38:43 +0200 : cleanup on exit
+# <CHANGELOG:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s>
 #
 
 package App::nrun;
@@ -60,6 +43,7 @@ use Net::Ping;
 use POSIX qw(getuid);
 use File::Temp qw(tempfile);
 
+use NRun::Util;
 use NRun::Version;
 use NRun::Worker;
 use NRun::Dumper;
@@ -72,25 +56,23 @@ our $options = {};
 # dump a short usage info to stdout.
 sub usage {
 
-    print "usage: " . basename($0) . " -c <CMD> [-h <HOSTS>] <HOST1> <HOST2> ... \n";
-    print "--hosts-file,-h <HOSTS>    file containing the target hosts (one host per line).\n";
-    print "--command,-c <CMD>         command to be executed.\n";
-    print "--arguments,-a <ARGS>      the arguments that should be passed to command.\n";
-    print "--parallel,-p <MAX>        number of parallel connections (defaults to 5).\n";
-    print "--dump-results             instead of dumping the command output, dump the exit status.\n";
-    print "--log-directory,-l <DIR>   base directory for the log files.\n";
-    print "--timeout,-t <SEC>         timeout for each command execution (defaults to 60).\n";
-    print "--version                  print the version string and exit.\n";
-    print "--copy                     copy command to target host before execution.\n";
-    print "--no-hostname              omit hostname prefix.\n";
-    print "--no-logfile               do not generate any log files.\n";
-    print "--skip-ping-check          skip checking if the host answers on ping.\n";
-    print "--skip-ns-check            skip checking if the hostname is resolvable.\n";
-    print "--mode <MODE>              remote execution mode:\n";
+    print "usage: " . basename($0) . " -t HOST1[,HOST2,...] -- COMMAND\n";
+    print "--target,-t HOST1,HOST2  comma separated list of target hosts.\n";
+    print "--parallel,-p MAX        number of parallel connections (defaults to 5).\n";
+    print "--dump-results,-d        instead of dumping the command output, dump the exit status.\n";
+    print "--log-directory,-l DIR   base directory for the log files.\n";
+    print "--timeout SEC            timeout for each command execution (defaults to 60).\n";
+    print "--version,-v             print the version string and exit.\n";
+    print "--copy,-c                copy command to target host before execution.\n";
+    print "--no-hostname            omit hostname prefix.\n";
+    print "--no-logfile             do not generate any log files.\n";
+    print "--skip-ping-check        skip checking if the host answers on ping.\n";
+    print "--skip-ns-check          skip checking if the hostname is resolvable.\n";
+    print "--mode,-m MODE           remote execution mode:\n";
 
     foreach my $object (values(%{NRun::Worker::workers()})) { 
 
-        print "                           " . $object->mode() . " - " . $object->desc() ."\n";
+        print "                         " . $object->mode() . " - " . $object->desc() ."\n";
     }
 
     exit;
@@ -100,10 +82,8 @@ sub usage {
 # parse the commandline.
 sub parse_commandline {
 
-    my $arg_hosts_file      = $options->{arg_hosts_file};
     my $arg_parallel        = $options->{arg_parallel};
-    my $arg_command         = $options->{arg_command};
-    my $arg_arguments       = $options->{arg_arguments};
+    my $arg_target          = $options->{arg_target};
     my $arg_dump_results    = $options->{arg_dump_results};
     my $arg_no_hostname     = $options->{arg_no_hostname};
     my $arg_no_logfile      = $options->{arg_no_logfile};
@@ -116,20 +96,18 @@ sub parse_commandline {
     my $arg_timeout         = $options->{arg_timeout};
 
     my $ret = GetOptions (
-        "hosts-file|h=s"    => \$arg_hosts_file,
         "parallel|p=i"      => \$arg_parallel,
-        "command|c=s"       => \$arg_command,
-        "arguments|a=s"     => \$arg_arguments,
+        "target|t=s"        => \$arg_target,
         "no-hostname"       => \$arg_no_hostname,
-        "dump-results"      => \$arg_dump_results,
+        "dump-results|d"    => \$arg_dump_results,
         "log-directory|l=s" => \$arg_log_directory,
-        "timeout|t=i"       => \$arg_timeout,
+        "timeout=i"         => \$arg_timeout,
         "no-logfile"        => \$arg_no_logfile,
         "mode|m=s"          => \$arg_mode,
         "skip-ping-check"   => \$arg_skip_ping_check,
         "skip-ns-check"     => \$arg_skip_ns_check,
-        "copy"              => \$arg_copy,
-        "version"           => \$arg_version,
+        "copy|c"            => \$arg_copy,
+        "version|v"         => \$arg_version,
     );
 
     usage() if (not $ret);
@@ -140,9 +118,9 @@ sub parse_commandline {
         exit(0);
     }
 
-    if (not defined($arg_command)) {
+    if (scalar(@ARGV) == 0) {
 
-        print "error: parameter --command is mandatory.\n";
+        print "error: no command name given.\n";
         usage();
     }
 
@@ -152,12 +130,18 @@ sub parse_commandline {
         usage();
     }
 
+    if (not defined($arg_target)) {
+
+        print "error: parameter --target is mandatory.\n";
+        usage();
+    }
+
     my $date = time2str("%Y%m%d_%H_%M_%S", time);
 
-    $options->{hosts_file}      = $arg_hosts_file;
-    $options->{parallel}        = $arg_parallel;
-    $options->{command}         = $arg_command;
-    $options->{arguments}       = $arg_arguments ? $arg_arguments : "";
+    $options->{target}          = [ split(",", $arg_target) ];
+    $options->{parallel}        = $arg_parallel ? $arg_parallel : 5;
+    $options->{command}         = shift(@ARGV);
+    $options->{arguments}       = join(" ", @ARGV);
     $options->{timeout}         = $arg_timeout;
     $options->{no_logfile}      = $arg_no_logfile;
     $options->{copy}            = $arg_copy;
@@ -180,7 +164,7 @@ sub parse_commandline {
         $options->{log_directory} = "$arg_log_directory/$options->{log_directory}";
     } else {
 
-        $options->{log_directory} = home() . "/.nrun/$options->{log_directory}";
+        $options->{log_directory} = NRun::Util::home() . "/.nrun/$options->{log_directory}";
     }
 
     if ($options->{parallel} < 1) {
@@ -189,11 +173,12 @@ sub parse_commandline {
         usage();
     }
 
-    $options->{hosts} = \@ARGV ;
-    if (defined($arg_hosts_file)) {
+    $options->{hosts} = [];
+    foreach my $target (@{$options->{target}}) {
 
-        $options->{hosts} = [ read_hosts($arg_hosts_file), @ARGV ];
+        $options->{hosts} = [ @{$options->{hosts}}, NRun::Util::resolve_target($target, $options->{alias}) ];
     }
+    $options->{hosts} = [ NRun::Util::uniq(@{$options->{hosts}}) ];
 
     if (scalar(@{$options->{hosts}}) == 0) {
 
@@ -203,47 +188,14 @@ sub parse_commandline {
 }
 
 ###
-# return users home directory
-#
-# <- the current users home directory
-sub home {
-
-    my $home = (getpwuid(getuid()))[7];
-}
-
-###
-# read the hosts file.
-#
-# $_file - the file containing the hostnames, one per line
-# <- an array containing all hostnames
-sub read_hosts {
-
-    my $_file = shift;
-
-    my $hosts = {};
-
-    open(HOSTS, "<$_file") or die("Cannot open $_file: $!");
-    foreach my $host (<HOSTS>) {
-
-        chomp($host);
-        $host =~ s/^\s+//;
-        $host =~ s/\s+$//;
-
-        if (not $host =~ /^ *$/) {
-
-            # filter out duplicate entries
-            $hosts->{$host} = 1;
-        }
-    }
-
-    return keys(%$hosts);
-}
-
-###
 # callback function used by the dispatcher
 sub callback_action {
     
     my $_host = shift;
+
+    # ensure we will not die before our childs
+    local $SIG{INT}  = 'IGNORE';
+    local $SIG{TERM} = 'IGNORE';
 
     if (not (defined($options->{skip_ns_check}) or gethostbyname($_host))) {
 
@@ -283,6 +235,10 @@ sub callback_result {
     my $_host   = shift;
     my $_return = shift;
     my $_output = shift;
+
+    # ensure we will not die before our childs
+    local $SIG{INT}  = 'IGNORE';
+    local $SIG{TERM} = 'IGNORE';
 
     my $dumper = NRun::Dumper->new (
         {
@@ -328,7 +284,7 @@ sub main {
         [
             "$FindBin::Bin/../etc/nrun.config",
             "/etc/nrun.config",
-            home() . "/.nrun.config" 
+            NRun::Util::home() . "/.nrun.config" 
         ]
     );
 
@@ -374,10 +330,10 @@ synchronously.
 
 =head1 SYNOPSIS
 
-nrun -c CMD [-h HOSTS] [-a ARGS] [-p MAX] [-l DIR] [-t SEC]
+nrun -t HOST1[,HOST2,...] [-p MAX] [-l DIR] [-t SEC]
 [--mode MODE] [--dump-results] [--copy] [--no-hostname]
 [--no-logfile] [--skip-ping-check] [--skip-ns-check] [--version] 
-HOST1 HOST2 ...
+-- COMMAND
 
 
 =head1 DESCRIPTION
@@ -506,55 +462,70 @@ the following configuration options must be set in the configuration file:
 
 =head1 OPTIONS
 
-B<--hosts-file,-h HOSTS>   file containing the target hosts (one host per line).
+B<--target,-t HOST1[,HOST2,...]> comma separated list of target hosts (see TARGETS).
 
-B<--command,-c CMD>        command to be executed.
+B<--parallel,-p MAX>             number of parallel connections (defaults to 5).
 
-B<--arguments,-a ARGS>     the arguments that should be passed to command.
+B<--dump-results,-d>             instead of dumping the command output, dump the exit status.
 
-B<--parallel,-p MAX>       number of parallel connections (defaults to 5).
+B<--log-directory,-l DIR>        base directory for the log files.
 
-B<--dump-results>          instead of dumping the command output, dump the exit status.
+B<--timeout SEC>                 timeout for each command execution (defaults to 60).
 
-B<--log-directory,-l DIR>  base directory for the log files.
+B<--copy,-c>                     copy command to target host before execution.
 
-B<--timeout,-t SEC>        timeout for each command execution (defaults to 60).
+B<--no-hostname>                 omit hostname prefix.
 
-B<--copy>                  copy command to target host before execution.
+B<--no-logfile>                  do not generate any log files.
 
-B<--no-hostname>           omit hostname prefix.
+B<--skip-ping-check>             skip checking if the host answers on ping.
 
-B<--no-logfile>            do not generate any log files.
+B<--skip-ns-check>               skip checking if the hostname is resolvable.
 
-B<--skip-ping-check>       skip checking if the host answers on ping.
+B<--version,-v>                  print the version string and exit.
 
-B<--skip-ns-check>         skip checking if the hostname is resolvable.
+B<--mode,-m MODE>                remote execution mode (see MODES)
 
-B<--version>               print the version string and exit.
+=head1 TARGETS
 
-B<--mode MODE>             remote execution mode (see MODES)
+a target name may be either a filename containing the target hosts, one per line,
+an alias definition in the configuration file or simply a hostname.
+
+if there is a conflict, for example an alias named identically as an existing
+file, the alias will always overrule the filename and the filename will always
+overrule the hostname.
+
+an alias can be defined in the configuration file the following way. an alias
+definition may contain additional alias names, filenames or simply hostnames.
+
+	$options->{alias} = {
+
+		production  => [ "host1", "host2" ],
+		development => [ "host3", "host4" ],
+		all         => [ "production", "development" ],
+	}
 
 =head1 EXAMPLES
 
 1. run the command "ls" on host1 and host2.
 
-	$ nrun --command ls host1 host2
+	$ nrun --target host1,host2 -- ls
 
-2. run the command "ls -al" on host1, host2 and all hosts in the file <HOSTS.LST>.
+2. run the command "ls -al" on host1, host2 and all hosts in the file HOSTS.LST.
 
-	$ nrun --hosts-file <HOSTS.LST> --command ls --arguments "-al" host1 host2
+	$ nrun --target HOSTS.LST,host1,host2 -- ls -al
 
-3. run the command "ls" on all hosts in the file <HOSTS.LST> - mode "ssh".
+3. run the command "ls" on all hosts in the file HOSTS.LST - mode "ssh".
 
-	$ nrun --hosts-file <HOSTS.LST> --command ls --mode ssh
+	$ nrun --target HOSTS.LST --mode ssh -- ls 
 
 4. copy the script bin/script.sh to each target hosts and execute it.
 
-	$ nrun --hosts-file <HOSTS.LST> --command bin/script.sh --copy
+	$ nrun --target HOSTS.LST --copy -- bin/script.sh
 
 5. execute the local script test.sh for each target host
 
-	$ nrun --hosts-file <HOSTS.LST> --command ./test.sh --mode local
+	$ nrun --target HOSTS.LST --mode local -- ./test.sh
 
 
 =head1 NOTES
@@ -582,7 +553,7 @@ the helper script misc/put_pubkey can be used to transfer the ssh public key
 to the target hosts without supplying a password for each login. it is meant
 to be executed by the nrun script in mode local.
 
-        $ nrun -h <HOSTS.LST> -c ./put_pubkey -a "<KEY> <USER> <PWD>" --mode local -t 120
+	$ nrun -t HOSTS.LST --mode local --timeout 120 -- ./put_pubkey KEY USER PWD
 
 =head1 AUTHOR
 
