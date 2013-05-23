@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with nrun.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Program: Version.pm
+# Program: Constants.pm
 # Author:  Timo Benk <benk@b1-systems.de>
 # Date:    Tue May 21 18:49:02 2013 +0200
 # Ident:   1f9621d3e8f9730a612900fb3f08e9ebdb14d9e8
@@ -24,20 +24,18 @@
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
 # 
-# Timo Benk : 2013-05-04 18:44:26 +0200 : unnecessary use's removed
-# Timo Benk : 2013-05-04 19:16:01 +0200 : being more portable
-# Timo Benk : 2013-05-06 09:03:50 +0200 : version set to 1.0.0
-# Timo Benk : 2013-05-08 14:20:54 +0200 : development release 1.0.0_0
-# Timo Benk : 2013-05-09 08:08:32 +0200 : development release 1.0.0_1
-# Timo Benk : 2013-05-09 08:11:50 +0200 : development release 1.0.0_2
-# Timo Benk : 2013-05-13 18:50:47 +0200 : development release 1.0.0_3
-# Timo Benk : 2013-05-13 19:02:35 +0200 : development release 1.0.0_4
-# Timo Benk : 2013-05-21 18:49:02 +0200 : development release 1.0.0_5
+# Timo Benk : 2013-05-21 18:47:43 +0200 : parameter --async added
 #
 
-package NRun::Version;
+package NRun::Constants;
 
-use version;
+our $CODE_SIGINT       = -255;
+our $CODE_SIGTERM      = -254;
+our $CODE_SIGALRM      = -253;
+our $RSCD_NOT_ALIVE    = -251;
+our $EXECUTON_FAILED   = -250;
+our $MISSING_DNS_ENTRY = -249;
+our $PING_FAILED       = -248;
+our $RSCD_ERROR        = -128;
 
-our $VERSION = qv(1.0.0_5);
-
+1;

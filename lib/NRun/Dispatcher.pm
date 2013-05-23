@@ -18,8 +18,8 @@
 #
 # Program: Dispatcher.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Mon May 13 18:54:32 2013 +0200
-# Ident:   beeacd63b3b9e6fe986adc9c52feb80ebaf984d8
+# Date:    Tue May 21 18:49:02 2013 +0200
+# Ident:   1f9621d3e8f9730a612900fb3f08e9ebdb14d9e8
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -29,6 +29,7 @@
 # Timo Benk : 2013-05-08 10:05:39 +0200 : better signal handling implemented
 # Timo Benk : 2013-05-08 15:11:24 +0200 : use symbolic names in kill()
 # Timo Benk : 2013-05-13 15:58:07 +0200 : child processes died before the result was handled
+# Timo Benk : 2013-05-21 18:47:43 +0200 : parameter --async added
 #
 
 package NRun::Dispatcher;
@@ -127,6 +128,50 @@ sub dispatch {
 }
 
 ###
+# SIGUSR1 handler
+#
+# $_pids - pid pool hash reference
+sub handler_usr1 {
+
+    my $_pids = shift;
+
+    kill(USR1 => keys(%$_pids));
+}
+
+###
+# SIGUSR2 handler
+#
+# $_pids - pid pool hash reference
+sub handler_usr2 {
+
+    my $_pids = shift;
+
+    kill(USR2 => keys(%$_pids));
+}
+
+###
+# SIGINT handler
+#
+# $_pids - pid pool hash reference
+sub handler_int {
+
+    my $_pids = shift;
+
+    kill(INT => keys(%$_pids));
+}
+
+###
+# SIGTERM handler
+#
+# $_pids - pid pool hash reference
+sub handler_term {
+
+    my $_pids = shift;
+
+    kill(TERM => keys(%$_pids));
+}
+
+###
 # process dispatching handler.
 sub run {
 
@@ -134,10 +179,10 @@ sub run {
 
     my (@pool, %pids);
 
-    local $SIG{USR1} = sub { kill(USR1 => keys(%pids)); };
-    local $SIG{USR2} = sub { kill(USR2 => keys(%pids)); };
-    local $SIG{INT}  = sub { kill(INT  => keys(%pids)); exit; };
-    local $SIG{TERM} = sub { kill(TERM => keys(%pids)); exit; };
+    my $handler_usr1 = NRun::Signal::register('USR1', \&handler_usr1, [ \%pids ], $$);
+    my $handler_usr2 = NRun::Signal::register('USR2', \&handler_usr2, [ \%pids ], $$);
+    my $handler_int  = NRun::Signal::register('INT',  \&handler_int,  [ \%pids ], $$);
+    my $handler_term = NRun::Signal::register('TERM', \&handler_term, [ \%pids ], $$);
 
     # rampup
     while (scalar(@pool) < $_self->{nmax} and scalar(@{$_self->{objects}}) > 0) {
@@ -188,6 +233,11 @@ sub run {
 
         usleep(100000);
     }
+
+    NRun::Signal::deregister('USR1', $handler_usr1);
+    NRun::Signal::deregister('USR2', $handler_usr2);
+    NRun::Signal::deregister('INT',  $handler_int);
+    NRun::Signal::deregister('TERM', $handler_term);
 }
 
 1;

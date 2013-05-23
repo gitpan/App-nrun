@@ -19,8 +19,8 @@
 #
 # Program: nrun
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Mon May 13 18:54:32 2013 +0200
-# Ident:   beeacd63b3b9e6fe986adc9c52feb80ebaf984d8
+# Date:    Wed May 22 18:42:06 2013 +0200
+# Ident:   dbab288e13091bb781b47c4594aa04be9d40b95f
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -45,6 +45,15 @@
 # Timo Benk : 2013-05-13 11:12:49 +0200 : commandline syntax simplified
 # Timo Benk : 2013-05-13 13:47:10 +0200 : some command abbreviations added
 # Timo Benk : 2013-05-13 15:58:07 +0200 : child processes died before the result was handled
+# Timo Benk : 2013-05-13 19:56:46 +0200 : semaphores will only be deleted in parent process
+# Timo Benk : 2013-05-21 18:47:43 +0200 : parameter --async added
+# Timo Benk : 2013-05-21 19:13:51 +0200 : use a different temporary filename for each process
+# Timo Benk : 2013-05-22 08:28:30 +0200 : rc file uses now yaml syntax
+# Timo Benk : 2013-05-22 13:09:13 +0200 : option --no-logfile was broken
+# Timo Benk : 2013-05-22 13:20:36 +0200 : --skip-ping-check and --skip-ns-check enabled
+# Timo Benk : 2013-05-22 13:22:48 +0200 : --copy cleanup will not be logged
+# Timo Benk : 2013-05-22 18:10:55 +0200 : dump the exit code per default in ncopy
+# Timo Benk : 2013-05-22 18:42:06 +0200 : timeout defaults to 60 if not set
 #
 
 package App::nrun;
@@ -70,6 +79,7 @@ use NRun::Worker;
 use NRun::Dumper;
 use NRun::Logger;
 use NRun::Dispatcher;
+use NRun::Signal;
 
 our $options = {};
 
@@ -78,22 +88,23 @@ our $options = {};
 sub usage {
 
     print "usage: " . basename($0) . " -t HOST1[,HOST2,...] -- COMMAND\n";
-    print "--target,-t HOST1,HOST2  comma separated list of target hosts.\n";
-    print "--parallel,-p MAX        number of parallel connections (defaults to 5).\n";
+    print "--async,-a               asynchronous output mode.\n";
+    print "--copy,-c                copy command to target host before execution.\n";
     print "--dump-results,-d        instead of dumping the command output, dump the exit status.\n";
     print "--log-directory,-l DIR   base directory for the log files.\n";
-    print "--timeout SEC            timeout for each command execution (defaults to 60).\n";
-    print "--version,-v             print the version string and exit.\n";
-    print "--copy,-c                copy command to target host before execution.\n";
     print "--no-hostname            omit hostname prefix.\n";
     print "--no-logfile             do not generate any log files.\n";
-    print "--skip-ping-check        skip checking if the host answers on ping.\n";
+    print "--parallel,-p MAX        number of parallel connections (defaults to 5).\n";
     print "--skip-ns-check          skip checking if the hostname is resolvable.\n";
+    print "--skip-ping-check        skip checking if the host answers on ping.\n";
+    print "--target,-t HOST1,HOST2  comma separated list of target hosts.\n";
+    print "--timeout SEC            timeout for each command execution (defaults to 60).\n";
+    print "--version,-v             print the version string and exit.\n";
     print "--mode,-m MODE           remote execution mode:\n";
 
     foreach my $object (values(%{NRun::Worker::workers()})) { 
 
-        print "                         " . $object->mode() . " - " . $object->desc() ."\n";
+        print "                         " . $object->{MODE} . " - " . $object->{DESC} ."\n";
     }
 
     exit;
@@ -104,6 +115,7 @@ sub usage {
 sub parse_commandline {
 
     my $arg_parallel        = $options->{arg_parallel};
+    my $arg_async           = $options->{arg_async };
     my $arg_target          = $options->{arg_target};
     my $arg_dump_results    = $options->{arg_dump_results};
     my $arg_no_hostname     = $options->{arg_no_hostname};
@@ -117,6 +129,7 @@ sub parse_commandline {
     my $arg_timeout         = $options->{arg_timeout};
 
     my $ret = GetOptions (
+        "async|a"           => \$arg_async,
         "parallel|p=i"      => \$arg_parallel,
         "target|t=s"        => \$arg_target,
         "no-hostname"       => \$arg_no_hostname,
@@ -163,20 +176,33 @@ sub parse_commandline {
     $options->{parallel}        = $arg_parallel ? $arg_parallel : 5;
     $options->{command}         = shift(@ARGV);
     $options->{arguments}       = join(" ", @ARGV);
-    $options->{timeout}         = $arg_timeout;
+    $options->{timeout}         = $arg_timeout ? $arg_timeout : 60;
     $options->{no_logfile}      = $arg_no_logfile;
     $options->{copy}            = $arg_copy;
     $options->{skip_ns_check}   = $arg_skip_ns_check;
     $options->{skip_ping_check} = $arg_skip_ping_check;
     $options->{mode}            = lc($arg_mode);
 
-    $options->{dump} = "output";
+    $options->{dumpmode} = "output";
     if (defined($arg_dump_results)) {
-    
-        $options->{dump} = "result";
-    } elsif (defined($arg_no_hostname)) {
 
-        $options->{dump} = "output_no_hostname";
+        $options->{dumpmode} = "result";
+    }
+
+    if (defined($arg_async)) {
+
+        $options->{dumpmode} .= "_async";
+    } else {
+
+        $options->{dumpmode} .= "_sync";
+    }
+
+    if (defined($arg_no_hostname)) {
+
+        $options->{dumpmode} .= "_no_hostname";
+    } else {
+
+        $options->{dumpmode} .= "_hostname";
     }
 
     $options->{log_directory} = basename($options->{command}) . "/" . $date;
@@ -214,106 +240,95 @@ sub callback_action {
     
     my $_host = shift;
 
-    # ensure we will not die before our childs
-    local $SIG{INT}  = 'IGNORE';
-    local $SIG{TERM} = 'IGNORE';
-
-    if (not (defined($options->{skip_ns_check}) or gethostbyname($_host))) {
-
-        return (-254, "dns entry is missing");
-    }
-
-    if (not (defined($options->{skip_ping_check}) or Net::Ping->new()->ping($_host))) {
-
-        return (-253, "not pinging");
-    }
-
-    my $cmd = $options->{command};
-
-    if (defined($options->{copy})) {
-
-        my $src = $cmd;
-        $cmd  = (tempfile(OPEN => 0, DIR => "/tmp"))[1];
-
-        my ($ret, $out) = NRun::Worker::workers()->{$options->{mode}}->copy($_host, $src, $cmd);
-        return ($ret, $out) if (not $ret == 0);
-    }
-
-    my ($ret, $out) = NRun::Worker::workers()->{$options->{mode}}->execute($_host, $cmd, $options->{arguments});
-
-    if (defined($options->{copy})) {
-
-        NRun::Worker::workers()->{$options->{mode}}->delete($_host, $cmd);
-    }
-
-    return ($ret, $out);
-}
-
-###
-# callback function used by the dispatcher
-sub callback_result {
-
-    my $_host   = shift;
-    my $_return = shift;
-    my $_output = shift;
-
-    # ensure we will not die before our childs
-    local $SIG{INT}  = 'IGNORE';
-    local $SIG{TERM} = 'IGNORE';
+    my $command = $options->{command};
+    my $worker = NRun::Worker::workers()->{$options->{mode}}->{NAME}->new();
 
     my $dumper = NRun::Dumper->new (
         {
-            dump      => $options->{dump},
+            hostname  => $_host,
+            mode      => $options->{dumpmode},
             semaphore => $options->{sem_dumper},
         }
     );
 
-    $dumper->dump($_host, $_return, $_output);
+    my $logger = undef;
+    if (not defined($options->{no_logfile})) {
 
-    my $logger = NRun::Logger->new (
+        $logger = NRun::Logger->new (
+            {
+                hostname  => $_host,
+                basedir   => $options->{log_directory},
+                semaphore => $options->{sem_logger},
+            }
+        );
+    }
+
+    $worker->init (
         {
-            basedir   => $options->{log_directory},
-            semaphore => $options->{sem_logger},
+            %$options,
+            hostname => $_host,
+            dumper   => $dumper,
+            logger   => $logger,
         }
     );
 
-    $logger->log($_host, $_return, $_output) if (not defined($options->{no_logfile}));
-}
+    if (not $worker->pre_check()) {
 
-##
-# read configuration files
-#
-# $_files - the files to be read (values in last file will overwrite values in first file)
-sub read_config_files {
+        $worker->destroy();
+        return;
+    }
 
-    my $_files = shift;
+    if (defined($options->{copy})) {
 
-    foreach my $file (@$_files) {
-  
-        if (-e $file) {
-  
-            require $file;
+        my $source = $command;
+        $command = (tempfile(OPEN => 0, DIR => "/tmp"))[1] . "$$";
+
+        my $ret = $worker->copy($source, $command);
+        if (not $ret == 0) {
+
+            $worker->destroy();
+            return;
         }
     }
+
+    $worker->execute($command, $options->{arguments});
+    $worker->destroy();
+
+    if (defined($options->{copy})) {
+
+        $worker->delete($command);
+    }
+
+}
+
+###
+# ensure exit on TERM, INT and ALRM
+sub handler {
+
+    wait();
+    exit();
 }
 
 ###
 # main
 sub main {
 
-    read_config_files (
+    NRun::Signal::register('TERM', \&handler);
+    NRun::Signal::register('INT',  \&handler);
+    NRun::Signal::register('ALRM', \&handler);
+
+    $options = NRun::Util::read_config_files (
         [
-            "$FindBin::Bin/../etc/nrun.config",
-            "/etc/nrun.config",
-            NRun::Util::home() . "/.nrun.config" 
+            "$FindBin::Bin/../etc/nrunrc",
+            "/etc/nrunrc",
+            NRun::Util::home() . "/.nrunrc" 
         ]
     );
 
     $options->{sem_logger} = NRun::Semaphore->new();
     $options->{sem_dumper} = NRun::Semaphore->new();
-    $options->{sem_worker} = NRun::Semaphore->new();
 
-    NRun::Worker::init($options, $options->{sem_worker});
+    $options->{sem_ppid} = $$;
 
     parse_commandline();
 
@@ -324,7 +339,6 @@ sub main {
             objects => $options->{hosts},
     
             callback_action => \&callback_action,
-            callback_result => \&callback_result,
         }
     );
 
@@ -335,9 +349,11 @@ main();
 
 END {
 
-    $options->{sem_logger}->delete();
-    $options->{sem_dumper}->delete();
-    $options->{sem_worker}->delete();
+    if ($options->{sem_ppid} == $$) {
+
+        $options->{sem_logger}->delete();
+        $options->{sem_dumper}->delete();
+    }
 }
 
 __END__
@@ -354,7 +370,7 @@ synchronously.
 nrun -t HOST1[,HOST2,...] [-p MAX] [-l DIR] [-t SEC]
 [--mode MODE] [--dump-results] [--copy] [--no-hostname]
 [--no-logfile] [--skip-ping-check] [--skip-ns-check] [--version] 
--- COMMAND
+[--async] -- COMMAND
 
 
 =head1 DESCRIPTION
@@ -371,27 +387,48 @@ special configuration options for the different modes and additional all
 commandline options can be given in a configuration file.
 
 the following three places will be searched for configuration files (values in the last
-configuration file will overwrite values in the first configuration file):
+configuration file will overwrite values in the first configuration file). indentation
+does matter.
 
-- $FindBin::Bin/../etc/nrun.config
+- $FindBin::Bin/../etc/nrunrc
 
-- /etc/nrun.config
+- /etc/nrunrc
 
-- $HOME/.nrun.config
+- $HOME/.nrunrc
 
-	###
-	# global options
-	$options->{ssh_binary}   = "/usr/bin/ssh";
-	$options->{scp_binary}   = "/usr/bin/scp";
-	$options->{ssh_args}     = "-o PreferredAuthentications=publickey";
-	$options->{ssh_user}     = "root";
-	$options->{scp_args}     = "-o PreferredAuthentications=publickey";
-	$options->{scp_user}     = "root";
-	$options->{arg_mode}     = "ssh";
-	$options->{arg_parallel} = 5;
-	$options->{arg_timeout}  = 60;
-	
-	1;
+      ---
+      # mode ssh options
+      ssh_binary: /usr/bin/ssh
+      scp_binary: /usr/bin/scp
+      ssh_args:   -o PreferredAuthentications=publickey
+      scp_args:   -o PreferredAuthentications=publickey
+      
+      # mode nsh options
+      agentinfo_binary: agentinfo
+      nexec_binary:     nexec
+      ncp_binary:       ncp
+      nexec_args:
+      agentinfo_args:
+      ncp_args:
+      
+      # mode rsh options
+      rsh_binary: /usr/bin/rsh
+      rcp_binary: /usr/bin/rcp
+      rsh_user:   root
+      rcp_user:   root
+      rsh_args:
+      rcp_args:
+      
+      # additional commandline options
+      arg_mode:     ssh
+      arg_parallel: 5
+      arg_timeout:  60
+      
+      # alias definitions
+      alias:
+          production:
+              - host1
+              - host2
 
 =head1 LOGGING
 
@@ -420,10 +457,6 @@ the following configuration options must be set in the configuration file:
 
 'scp_binary' - scp binary to be executed
 
-'ssh_user'   - ssh login user
-
-'scp_user'   - scp login user
-
 for passwordless login ssh-agent can be used:
 
 	# ssh-keygen
@@ -435,10 +468,11 @@ for passwordless login ssh-agent can be used:
 to prevent any ssh interaction the following ssh command paramters are
 suggested:
 
+	-o User=root
 	-o PreferredAuthentications=hostbased,publickey
 	-o StrictHostKeyChecking=no
 	-o UserKnownHostsFile=/dev/null
-	-q
+	-o LogLevel=FATAL
 
 =head2 mode local
 
@@ -483,29 +517,31 @@ the following configuration options must be set in the configuration file:
 
 =head1 OPTIONS
 
-B<--target,-t HOST1[,HOST2,...]> comma separated list of target hosts (see TARGETS).
+B<--async,-a>                    asynchronous output mode.
 
-B<--parallel,-p MAX>             number of parallel connections (defaults to 5).
+B<--copy,-c>                     copy command to target host before execution.
 
 B<--dump-results,-d>             instead of dumping the command output, dump the exit status.
 
 B<--log-directory,-l DIR>        base directory for the log files.
 
-B<--timeout SEC>                 timeout for each command execution (defaults to 60).
-
-B<--copy,-c>                     copy command to target host before execution.
+B<--mode,-m MODE>                remote execution mode (see MODES)
 
 B<--no-hostname>                 omit hostname prefix.
 
 B<--no-logfile>                  do not generate any log files.
 
+B<--parallel,-p MAX>             number of parallel connections (defaults to 5).
+
 B<--skip-ping-check>             skip checking if the host answers on ping.
 
 B<--skip-ns-check>               skip checking if the hostname is resolvable.
 
-B<--version,-v>                  print the version string and exit.
+B<--target,-t HOST1[,HOST2,...]> comma separated list of target hosts (see TARGETS).
 
-B<--mode,-m MODE>                remote execution mode (see MODES)
+B<--timeout SEC>                 timeout for each command execution (defaults to 60).
+
+B<--version,-v>                  print the version string and exit.
 
 =head1 TARGETS
 
@@ -518,13 +554,19 @@ overrule the hostname.
 
 an alias can be defined in the configuration file the following way. an alias
 definition may contain additional alias names, filenames or simply hostnames.
+indentation does matter.
 
-	$options->{alias} = {
-
-		production  => [ "host1", "host2" ],
-		development => [ "host3", "host4" ],
-		all         => [ "production", "development" ],
-	}
+    # alias definitions
+    alias:
+        production:
+            - host1
+            - host2
+        development:
+            - host3
+            - host4
+        all:
+            - production
+            - development
 
 =head1 EXAMPLES
 
@@ -555,18 +597,19 @@ definition may contain additional alias names, filenames or simply hostnames.
 
 it is possible to signal nrun with USR1 and USR2 to dump, resp. save the currently
 running processes. if nrun is signaled with USR2, it will create a file in
-the directory it was started in called trace.txt.
+the log directory trace_<%Y%m%d_%H_%M_%S>.log.
 
-the integer in square brackets is the pid of the perl process and the integer in 
-round brackets is the pid of the executed process.
+the integer in square brackets is the pid of the perl process.
 
 	$ kill -USR1 1234
-        [14760]: (14761) TARGET_HOST=localhost /tmp/test.sh
-        [14760]: 1
-        [14760]: 2
-        [14756]: (14757) TARGET_HOST=qn439 /tmp/test.sh
-        [14756]: 1
-        [14756]: 2
+	host1[14760]: (31800) /usr/bin/ssh -o User=root localhost sleep 120
+	host1[14760]: 1
+	host1[14760]: 2
+	host1[14760]: SIGUSR1 received
+	host1[14756]: (31801) /usr/bin/ssh -o User=root localhost sleep 120
+	host2[14756]: 1
+	host2[14756]: 2
+	host2[14756]: SIGUSR1 received
 
 =head2 transferring the public key
 

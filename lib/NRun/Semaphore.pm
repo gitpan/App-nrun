@@ -18,8 +18,8 @@
 #
 # Program: Semaphore.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Mon May 13 18:54:32 2013 +0200
-# Ident:   beeacd63b3b9e6fe986adc9c52feb80ebaf984d8
+# Date:    Tue May 21 18:49:02 2013 +0200
+# Ident:   1f9621d3e8f9730a612900fb3f08e9ebdb14d9e8
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -30,6 +30,7 @@
 # Timo Benk : 2013-05-09 09:24:01 +0200 : no possibility to determine the semaphore key
 # Timo Benk : 2013-05-09 10:55:29 +0200 : race condition fixed
 # Timo Benk : 2013-05-09 16:35:45 +0200 : last commit reverted
+# Timo Benk : 2013-05-21 18:47:43 +0200 : parameter --async added
 #
 
 package NRun::Semaphore;
@@ -64,14 +65,13 @@ sub new {
 
             $self->{key} = int(rand(100000));
         }
-
-        $self->{semaphore} = new IPC::Semaphore($self->{key}, 1, 0600 | IPC_CREAT);
-        $self->{semaphore}->op(0,1,0);
     } else {
 
         $self->{key} = $_obj->{key};
-        $self->{semaphore} = new IPC::Semaphore($self->{key}, 1, 0);
     }
+
+    $self->{semaphore} = new IPC::Semaphore($self->{key}, 1, 0600 | IPC_CREAT);
+    $self->{semaphore}->op(0,1,0);
 
     return $self;
 }

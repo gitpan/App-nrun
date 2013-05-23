@@ -18,8 +18,8 @@
 #
 # Program: WorkerRsh.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Mon May 13 18:54:32 2013 +0200
-# Ident:   beeacd63b3b9e6fe986adc9c52feb80ebaf984d8
+# Date:    Tue May 21 18:49:02 2013 +0200
+# Ident:   1f9621d3e8f9730a612900fb3f08e9ebdb14d9e8
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -28,9 +28,10 @@
 # Timo Benk : 2013-04-28 20:02:52 +0200 : options --skip-ping-check and --skip-ns-check added
 # Timo Benk : 2013-04-28 22:01:00 +0200 : ping and ns check moved into Main::callback_action
 # Timo Benk : 2013-04-29 18:53:21 +0200 : introducing ncopy
+# Timo Benk : 2013-05-21 18:47:43 +0200 : parameter --async added
 #
 
-package WorkerRsh;
+package NRun::Worker::WorkerRsh;
 
 use strict;
 use warnings;
@@ -41,26 +42,19 @@ use POSIX qw(getuid);
 
 our @ISA = qw(NRun::Worker);
 
-###
-# module specification
-our $MODINFO = {
+BEGIN {
 
-  'MODE' => "rsh",
-  'DESC' => "rsh based remote execution",
-};
+    NRun::Worker::register ( {
+
+        'MODE' => "rsh",
+        'DESC' => "rsh based remote execution",
+        'NAME' => "NRun::Worker::WorkerRsh",
+    } );
+}
 
 ###
 # create a new object.
 #
-# $_cfg - parameter hash where
-# {
-#   'rsh_args'   - arguments supplied to the rsh binary
-#   'rcp_args'   - arguments supplied to the rcp binary
-#   'rsh_binary' - rsh binary to be executed
-#   'rcp_binary' - rcp binary to be executed
-#   'rsh_user'   - rsh login user
-#   'rcp_user'   - rcp login user
-# }
 # <- the new object
 sub new {
 
@@ -70,83 +64,93 @@ sub new {
     my $self = {};
     bless $self, $_pkg;
 
-    $self->{rsh_args}   = $_cfg->{rsh_args};
-    $self->{rcp_args}   = $_cfg->{rcp_args};
-    $self->{rsh_binary} = $_cfg->{rsh_binary};
-    $self->{rcp_binary} = $_cfg->{rcp_binary};
-    $self->{rsh_user}   = $_cfg->{rsh_user};
-    $self->{rcp_user}   = $_cfg->{rcp_user};
-
-    if (not defined($self->{rsh_user})) {
-
-        ($self->{rsh_user}) = getpwuid(getuid());
-    }
-
-    if (not defined($self->{rcp_user})) {
-
-        ($self->{rcp_user}) = getpwuid(getuid());
-    }
-
-    $self->{MODINFO} = $MODINFO;
     return $self;
 }
 
 ###
-# copy a file using rsh to $_host.
+# initialize this worker module.
 #
-# $_host   - the host the command should be exeuted on
+# $_cfg - parameter hash where
+# {
+#   'hostname'   - hostname this worker should act on
+#   'dumper'     - dumper object
+#   'logger'     - logger object
+#   'rsh_args'   - arguments supplied to the rsh binary
+#   'rcp_args'   - arguments supplied to the rcp binary
+#   'rsh_binary' - rsh binary to be executed
+#   'rcp_binary' - rcp binary to be executed
+#   'rsh_user'   - rsh login user
+#   'rcp_user'   - rcp login user
+# }
+sub init {
+
+    my $_self = shift;
+    my $_cfg  = shift;
+
+    $_self->SUPER::init($_cfg);
+
+    $_self->{rsh_args}   = $_cfg->{rsh_args};
+    $_self->{rcp_args}   = $_cfg->{rcp_args};
+    $_self->{rsh_binary} = $_cfg->{rsh_binary};
+    $_self->{rcp_binary} = $_cfg->{rcp_binary};
+    $_self->{rsh_user}   = $_cfg->{rsh_user};
+    $_self->{rcp_user}   = $_cfg->{rcp_user};
+
+    if (not defined($_self->{rsh_user})) {
+
+        ($_self->{rsh_user}) = getpwuid(getuid());
+    }
+
+    if (not defined($_self->{rcp_user})) {
+
+        ($_self->{rcp_user}) = getpwuid(getuid());
+    }
+}
+
+###
+# copy a file using rsh to $_self->{hostname}.
+#
 # $_source - source file to be copied
 # $_target - destination $_source should be copied to
-# <- (
-#      $ret - the return code 
-#      $out - command output
-#    )
+# <- the return code 
 sub copy {
 
     my $_self   = shift;
-    my $_host   = shift;
     my $_source = shift;
     my $_target = shift;
 
-    return _("$_self->{rcp_binary} $_self->{rcp_args} $_source $_self->{rcp_user}\@$_host:$_target");
+    my ( $out, $ret ) = $_self->do("$_self->{rcp_binary} $_self->{rcp_args} $_source $_self->{rcp_user}\@$_self->{hostname}:$_target");
+    return $ret;
 }
 
 ###
-# execute the command using rsh on $_host.
+# execute the command using rsh on $_self->{hostname}.
 #
-# $_host    - the host the command should be exeuted on
 # $_command - the command that should be executed
 # $_args    - arguments that should be supplied to $_command
-# <- (
-#      $ret - the return code 
-#      $out - command output
-#    )
+# <- the return code 
 sub execute {
 
     my $_self    = shift;
-    my $_host    = shift;
     my $_command = shift;
     my $_args    = shift;
 
-    return _("$_self->{rsh_binary} $_self->{rsh_args} -l $_self->{rsh_user} $_host $_command $_args");
+    my ( $out, $ret ) = $_self->do("$_self->{rsh_binary} $_self->{rsh_args} -l $_self->{rsh_user} $_self->{hostname} $_command $_args");
+    return $ret;
 }
 
 ###
-# delete a file using rsh on $_host.
+# delete a file using rsh on $_self->{hostname}.
 #
-# $_host - the host the command should be exeuted on
 # $_file - the command that should be executed
-# <- (
-#      $ret - the return code 
-#      $out - command output
-#    )
+# <- the return code 
 sub delete {
 
     my $_self = shift;
-    my $_host = shift;
     my $_file = shift;
 
-    return _("$_self->{rsh_binary} $_self->{rsh_args} -l $_self->{rsh_user} $_host rm -f \"$_file\"");
+    my ( $out, $ret ) = $_self->do("$_self->{rsh_binary} $_self->{rsh_args} -l $_self->{rsh_user} $_self->{hostname} rm -f \"$_file\"");
+    return $ret;
 }
 
 1;
