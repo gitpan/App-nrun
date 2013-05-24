@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with nrun.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Program: WorkerSsh.pm
+# Program: WorkerGeneric.pm
 # Author:  Timo Benk <benk@b1-systems.de>
 # Date:    Fri May 24 08:03:19 2013 +0200
 # Ident:   88db47d4612f4742ac757cc09f728ebcaf7f6815
@@ -24,16 +24,10 @@
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
 # 
-# Timo Benk : 2013-04-28 17:27:31 +0200 : initial checkin
-# Timo Benk : 2013-04-28 20:02:52 +0200 : options --skip-ping-check and --skip-ns-check added
-# Timo Benk : 2013-04-28 22:01:00 +0200 : ping and ns check moved into Main::callback_action
-# Timo Benk : 2013-04-29 18:53:21 +0200 : introducing ncopy
-# Timo Benk : 2013-05-21 18:47:43 +0200 : parameter --async added
-# Timo Benk : 2013-05-23 17:26:57 +0200 : comment fixed for delete()
 # Timo Benk : 2013-05-24 08:03:19 +0200 : generic mode added
 #
 
-package NRun::Worker::WorkerSsh;
+package NRun::Worker::WorkerGeneric;
 
 use strict;
 use warnings;
@@ -48,9 +42,9 @@ BEGIN {
 
     NRun::Worker::register ( {
 
-        'MODE' => "ssh",
-        'DESC' => "ssh based remote execution",
-        'NAME' => "NRun::Worker::WorkerSsh",
+        'MODE' => "generic",
+        'DESC' => "generic mode",
+        'NAME' => "NRun::Worker::WorkerGeneric",
     } );
 }
 
@@ -74,12 +68,12 @@ sub new {
 #
 # $_cfg - parameter hash where
 # {
-#   'hostname'   - hostname this worker should act on
-#   'dumper'     - dumper object
-#   'logger'     - logger object
-#   'ssh_copy'   - commandline for the copy command (SOURCE, TARGET, HOSTNAME will be replaced)
-#   'ssh_exec'   - commandline for the exec command (COMMAND, ARGUMENTS, HOSTNAME will be replaced)
-#   'ssh_delete' - commandline for the delete command (FILE, HOSTNAME will be replaced)
+#   'hostname'       - hostname this worker should act on
+#   'dumper'         - dumper object
+#   'logger'         - logger object
+#   'generic_copy'   - commandline for the copy command (SOURCE, TARGET, HOSTNAME will be replaced)
+#   'generic_exec'   - commandline for the exec command (COMMAND, ARGUMENTS, HOSTNAME will be replaced)
+#   'generic_delete' - commandline for the delete command (FILE, HOSTNAME will be replaced)
 # }
 sub init {
 
@@ -88,9 +82,9 @@ sub init {
 
     $_self->SUPER::init($_cfg);
 
-    $_self->{ssh_copy}   = $_cfg->{ssh_copy};
-    $_self->{ssh_exec}   = $_cfg->{ssh_exec};
-    $_self->{ssh_delete} = $_cfg->{ssh_delete};
+    $_self->{generic_copy}   = $_cfg->{generic_copy};
+    $_self->{generic_exec}   = $_cfg->{generic_exec};
+    $_self->{generic_delete} = $_cfg->{generic_delete};
 }
 
 ###
@@ -105,7 +99,7 @@ sub copy {
     my $_source = shift;
     my $_target = shift;
 
-    my $cmdline = $_self->{ssh_copy};
+    my $cmdline = $_self->{generic_copy};
 
     $cmdline =~ s/SOURCE/$_source/g;
     $cmdline =~ s/TARGET/$_target/g;
@@ -128,7 +122,7 @@ sub execute {
     my $_command = shift;
     my $_args    = shift;
 
-    my $cmdline = $_self->{ssh_exec};
+    my $cmdline = $_self->{generic_exec};
 
     $cmdline =~ s/COMMAND/$_command/g;
     $cmdline =~ s/ARGUMENTS/$_args/g;
@@ -149,7 +143,7 @@ sub delete {
     my $_self = shift;
     my $_file = shift;
 
-    my $cmdline = $_self->{ssh_delete};
+    my $cmdline = $_self->{generic_delete};
 
     $cmdline =~ s/FILE/$_file/g;
     $cmdline =~ s/HOSTNAME/$_self->{hostname}/g;

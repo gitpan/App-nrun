@@ -18,8 +18,8 @@
 #
 # Program: Worker.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Wed May 22 13:20:36 2013 +0200
-# Ident:   dfac8f767efff616e9e8aa28e97435bf4bfbdad2
+# Date:    Fri May 24 08:03:19 2013 +0200
+# Ident:   88db47d4612f4742ac757cc09f728ebcaf7f6815
 # Branch:  <REFNAMES>
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -34,6 +34,7 @@
 # Timo Benk : 2013-05-21 18:47:43 +0200 : parameter --async added
 # Timo Benk : 2013-05-22 13:09:13 +0200 : option --no-logfile was broken
 # Timo Benk : 2013-05-22 13:20:36 +0200 : --skip-ping-check and --skip-ns-check enabled
+# Timo Benk : 2013-05-24 08:03:19 +0200 : generic mode added
 #
 
 package NRun::Worker;
@@ -134,7 +135,7 @@ sub handler {
 
     my $_pid  = shift;
 
-    if (defined($$_pid) and $$_pid != -128) {
+    if ($$_pid != -128) {
 
         kill(KILL => $$_pid);
     }
@@ -146,12 +147,14 @@ sub handler {
 # $_cmd -  the command to be executed
 # <- (
 #      $out - command output
-#      $ret - the return code (-128 indicates too many parallel connections)
+#      $ret - the return code 
 #    )
 sub do {
 
     my $_self = shift;
     my $_cmd  = shift;
+
+    chomp($_cmd);
 
     my $pid = -128;
     my @out = ();
@@ -160,7 +163,7 @@ sub do {
     my $handler_int  = NRun::Signal::register('INT',  \&handler, [ \$pid ]);
     my $handler_term = NRun::Signal::register('TERM', \&handler, [ \$pid ]);
 
-    $pid = open(CMD, "$_cmd 2>&1 2>&1|");
+    $pid = open(CMD, "$_cmd 2>&1 |");
     if (not defined($pid)) {
 
         $_self->{dumper}->push("$_cmd: $!\n") if (defined($_self->{dumper}));

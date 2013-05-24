@@ -19,8 +19,8 @@
 #
 # Program: nrun
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Wed May 22 18:42:06 2013 +0200
-# Ident:   dbab288e13091bb781b47c4594aa04be9d40b95f
+# Date:    Fri May 24 08:13:14 2013 +0200
+# Ident:   d8e31427a6c4750dd236d1fb48878fdfde4c1e09
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -54,6 +54,9 @@
 # Timo Benk : 2013-05-22 13:22:48 +0200 : --copy cleanup will not be logged
 # Timo Benk : 2013-05-22 18:10:55 +0200 : dump the exit code per default in ncopy
 # Timo Benk : 2013-05-22 18:42:06 +0200 : timeout defaults to 60 if not set
+# Timo Benk : 2013-05-23 10:09:31 +0200 : unnecessary wait() call in signal handler removed
+# Timo Benk : 2013-05-24 08:03:19 +0200 : generic mode added
+# Timo Benk : 2013-05-24 08:13:14 +0200 : default mode will be marked in usage string
 #
 
 package App::nrun;
@@ -104,7 +107,13 @@ sub usage {
 
     foreach my $object (values(%{NRun::Worker::workers()})) { 
 
-        print "                         " . $object->{MODE} . " - " . $object->{DESC} ."\n";
+        if (defined($options->{arg_mode}) and $options->{arg_mode} eq $object->{MODE}) {
+
+            print "                         " . $object->{MODE} . " - " . $object->{DESC} ." [default]\n";
+        } else {
+
+            print "                         " . $object->{MODE} . " - " . $object->{DESC} ."\n";
+        }
     }
 
     exit;
@@ -235,6 +244,16 @@ sub parse_commandline {
 }
 
 ###
+# ensure cleanup on TERM, INT and ALRM
+sub handler_cleanup {
+
+    my $_worker  = shift;
+    my $_command = shift;
+
+    $$_worker->delete($$_command);
+}
+
+###
 # callback function used by the dispatcher
 sub callback_action {
     
@@ -283,6 +302,10 @@ sub callback_action {
         my $source = $command;
         $command = (tempfile(OPEN => 0, DIR => "/tmp"))[1] . "$$";
 
+        NRun::Signal::register('TERM', \&handler_cleanup, [ \$worker, \$command ]);
+        NRun::Signal::register('INT',  \&handler_cleanup, [ \$worker, \$command ]);
+        NRun::Signal::register('ALRM', \&handler_cleanup, [ \$worker, \$command ]);
+
         my $ret = $worker->copy($source, $command);
         if (not $ret == 0) {
 
@@ -305,7 +328,6 @@ sub callback_action {
 # ensure exit on TERM, INT and ALRM
 sub handler {
 
-    wait();
     exit();
 }
 
@@ -388,7 +410,7 @@ commandline options can be given in a configuration file.
 
 the following three places will be searched for configuration files (values in the last
 configuration file will overwrite values in the first configuration file). indentation
-does matter.
+does matter (YAML syntax).
 
 - $FindBin::Bin/../etc/nrunrc
 
@@ -396,39 +418,51 @@ does matter.
 
 - $HOME/.nrunrc
 
-      ---
-      # mode ssh options
-      ssh_binary: /usr/bin/ssh
-      scp_binary: /usr/bin/scp
-      ssh_args:   -o PreferredAuthentications=publickey
-      scp_args:   -o PreferredAuthentications=publickey
-      
-      # mode nsh options
-      agentinfo_binary: agentinfo
-      nexec_binary:     nexec
-      ncp_binary:       ncp
-      nexec_args:
-      agentinfo_args:
-      ncp_args:
-      
-      # mode rsh options
-      rsh_binary: /usr/bin/rsh
-      rcp_binary: /usr/bin/rcp
-      rsh_user:   root
-      rcp_user:   root
-      rsh_args:
-      rcp_args:
-      
-      # additional commandline options
-      arg_mode:     ssh
-      arg_parallel: 5
-      arg_timeout:  60
-      
-      # alias definitions
-      alias:
-          production:
-              - host1
-              - host2
+    ---
+    # mode ssh options
+    ssh_copy: >
+        /usr/bin/scp
+        -o User=root
+        -o PreferredAuthentications=hostbased,publickey
+        -o StrictHostKeyChecking=no
+        -o UserKnownHostsFile=/dev/null
+        -o LogLevel=FATAL
+        SOURCE HOSTNAME:TARGET
+    
+    ssh_exec: >
+        /usr/bin/ssh
+        -o User=root
+        -o PreferredAuthentications=hostbased,publickey
+        -o StrictHostKeyChecking=no
+        -o UserKnownHostsFile=/dev/null
+        -o LogLevel=FATAL
+        HOSTNAME COMMAND ARGUMENTS
+    
+    ssh_delete: >
+        /usr/bin/ssh
+        -o User=root
+        -o PreferredAuthentications=hostbased,publickey
+        -o StrictHostKeyChecking=no
+        -o UserKnownHostsFile=/dev/null
+        -o LogLevel=FATAL
+        HOSTNAME rm -f "FILE"
+    
+    # additional commandline options
+    arg_mode: ssh
+    arg_parallel: 5
+    arg_timeout: 60
+    
+    # alias definitions
+    alias:
+        production:
+            - host1
+            - host2
+        development:
+            - host3
+            - host4
+        all:
+            - production
+            - development
 
 =head1 LOGGING
 
@@ -449,13 +483,11 @@ use ssh as the underlying remote access mechanism.
 
 the following configuration options must be set in the configuration file:
 
-'ssh_args'   - arguments supplied to the ssh binary
+'ssh_exec'   - commandline for remote execution (COMMAND, ARGUMENTS, HOSTNAME will be replaced)
 
-'scp_args'   - arguments supplied to the scp binary
+'ssh_copy'   - commandline for remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
 
-'ssh_binary' - ssh binary to be executed
-
-'scp_binary' - scp binary to be executed
+'ssh_delete' - commandline for remote deletion (FILE, HOSTNAME will be replaced)
 
 for passwordless login ssh-agent can be used:
 
@@ -474,10 +506,24 @@ suggested:
 	-o UserKnownHostsFile=/dev/null
 	-o LogLevel=FATAL
 
+=head2 mode rsh
+
+use rsh as the underlying remote access mechanism.
+
+the following configuration options must be set in the configuration file:
+
+'rsh_exec'   - commandline for remote execution (COMMAND, ARGUMENTS, HOSTNAME will be replaced)
+
+'rsh_copy'   - commandline for remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
+
+'rsh_delete' - commandline for remote deletion (FILE, HOSTNAME will be replaced)
+
 =head2 mode local
 
 execute the script locally for each host and set the environment variable
 TARGET_HOST on each execution.
+
+'local_exec' - commandline for local execution (COMMAND, ARGUMENTS, HOSTNAME will be replaced)
 
 =head2 mode nsh
 
@@ -485,35 +531,53 @@ use nsh as the underlying remote access mechanism.
 
 the following configuration options must be set in the configuration file:
 
-'agentinfo_args'   - arguments supplied to the agentinfo binary
+'nsh_exec'   - commandline for remote execution (COMMAND, ARGUMENTS, HOSTNAME will be replaced)
 
-'nexec_args'       - arguments supplied to the nexec binary
+'nsh_copy'   - commandline for remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
 
-'ncp_args'         - arguments supplied to the ncp binary
+'nsh_delete' - commandline for remote deletion (FILE, HOSTNAME will be replaced)
 
-'agentinfo_binary' - agentinfo binary to be executed
+'nsh_check'  - commandline for the agentinfo check command (HOSTNAME will be replaced)
 
-'nexec_binary'     - nexec binary to be executed
+=head2 mode generic
 
-'ncp_binary'       - ncp binary to be executed
+this is a special generic mode the can be used for arbitrary remote execution
+mechanisms.
 
-=head2 mode rsh
+'cmdline_exec'   - commandline for remote execution (COMMAND, ARGUMENTS, HOSTNAME will be replaced)
 
-use rsh as the underlying remote access mechanism.
+'cmdline_copy'   - commandline for remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
 
-the following configuration options must be set in the configuration file:
+'cmdline_delete' - commandline for remote deletion (FILE, HOSTNAME will be replaced)
 
-'rsh_args'   - arguments supplied to the rsh binary
+an example that resembles the mode ssh would look the following way:
 
-'rcp_args'   - arguments supplied to the rcp binary
-
-'rsh_binary' - rsh binary to be executed
-
-'rcp_binary' - rcp binary to be executed
-
-'rsh_user'   - rsh login user
-
-'rcp_user'   - rcp login user
+    generic_copy: >
+        /usr/bin/scp
+        -o User=root
+        -o PreferredAuthentications=hostbased,publickey
+        -o StrictHostKeyChecking=no
+        -o UserKnownHostsFile=/dev/null
+        -o LogLevel=FATAL
+        SOURCE HOSTNAME:TARGET
+    
+    generic_exec: >
+        /usr/bin/ssh
+        -o User=root
+        -o PreferredAuthentications=hostbased,publickey
+        -o StrictHostKeyChecking=no
+        -o UserKnownHostsFile=/dev/null
+        -o LogLevel=FATAL
+        HOSTNAME COMMAND ARGUMENTS
+    
+    generic_delete: >
+        /usr/bin/ssh
+        -o User=root
+        -o PreferredAuthentications=hostbased,publickey
+        -o StrictHostKeyChecking=no
+        -o UserKnownHostsFile=/dev/null
+        -o LogLevel=FATAL
+        HOSTNAME rm -f "FILE"
 
 =head1 OPTIONS
 

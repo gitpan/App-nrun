@@ -18,8 +18,8 @@
 #
 # Program: Dispatcher.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Tue May 21 18:49:02 2013 +0200
-# Ident:   1f9621d3e8f9730a612900fb3f08e9ebdb14d9e8
+# Date:    Thu May 23 10:16:34 2013 +0200
+# Ident:   60b2849d6599ba61a0bf8a22f5d77ef338e87078
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -30,6 +30,7 @@
 # Timo Benk : 2013-05-08 15:11:24 +0200 : use symbolic names in kill()
 # Timo Benk : 2013-05-13 15:58:07 +0200 : child processes died before the result was handled
 # Timo Benk : 2013-05-21 18:47:43 +0200 : parameter --async added
+# Timo Benk : 2013-05-23 10:16:34 +0200 : faster teardown by reducing the usleep() value
 #
 
 package NRun::Dispatcher;
@@ -189,7 +190,7 @@ sub run {
 
         $_self->dispatch(\@pool, \%pids, pop(@{$_self->{objects}}));
 
-        usleep(100000);
+        usleep(1000);
     }
 
     # hold level
@@ -211,7 +212,7 @@ sub run {
             unshift(@pool, $pid);
         }
 
-        usleep(100000);
+        usleep(1000);
     }
 
     # tear down
@@ -231,7 +232,7 @@ sub run {
             unshift(@pool, $pid);
         }
 
-        usleep(100000);
+        usleep(1000);
     }
 
     NRun::Signal::deregister('USR1', $handler_usr1);

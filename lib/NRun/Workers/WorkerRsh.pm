@@ -18,8 +18,8 @@
 #
 # Program: WorkerRsh.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Tue May 21 18:49:02 2013 +0200
-# Ident:   1f9621d3e8f9730a612900fb3f08e9ebdb14d9e8
+# Date:    Fri May 24 08:03:19 2013 +0200
+# Ident:   88db47d4612f4742ac757cc09f728ebcaf7f6815
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -29,6 +29,8 @@
 # Timo Benk : 2013-04-28 22:01:00 +0200 : ping and ns check moved into Main::callback_action
 # Timo Benk : 2013-04-29 18:53:21 +0200 : introducing ncopy
 # Timo Benk : 2013-05-21 18:47:43 +0200 : parameter --async added
+# Timo Benk : 2013-05-23 17:26:57 +0200 : comment fixed for delete()
+# Timo Benk : 2013-05-24 08:03:19 +0200 : generic mode added
 #
 
 package NRun::Worker::WorkerRsh;
@@ -75,12 +77,9 @@ sub new {
 #   'hostname'   - hostname this worker should act on
 #   'dumper'     - dumper object
 #   'logger'     - logger object
-#   'rsh_args'   - arguments supplied to the rsh binary
-#   'rcp_args'   - arguments supplied to the rcp binary
-#   'rsh_binary' - rsh binary to be executed
-#   'rcp_binary' - rcp binary to be executed
-#   'rsh_user'   - rsh login user
-#   'rcp_user'   - rcp login user
+#   'rsh_copy'   - commandline for the copy command (SOURCE, TARGET, HOSTNAME will be replaced)
+#   'rsh_exec'   - commandline for the exec command (COMMAND, ARGUMENTS, HOSTNAME will be replaced)
+#   'rsh_delete' - commandline for the delete command (FILE, HOSTNAME will be replaced)
 # }
 sub init {
 
@@ -89,67 +88,74 @@ sub init {
 
     $_self->SUPER::init($_cfg);
 
-    $_self->{rsh_args}   = $_cfg->{rsh_args};
-    $_self->{rcp_args}   = $_cfg->{rcp_args};
-    $_self->{rsh_binary} = $_cfg->{rsh_binary};
-    $_self->{rcp_binary} = $_cfg->{rcp_binary};
-    $_self->{rsh_user}   = $_cfg->{rsh_user};
-    $_self->{rcp_user}   = $_cfg->{rcp_user};
-
-    if (not defined($_self->{rsh_user})) {
-
-        ($_self->{rsh_user}) = getpwuid(getuid());
-    }
-
-    if (not defined($_self->{rcp_user})) {
-
-        ($_self->{rcp_user}) = getpwuid(getuid());
-    }
+    $_self->{rsh_copy}   = $_cfg->{rsh_copy};
+    $_self->{rsh_exec}   = $_cfg->{rsh_exec};
+    $_self->{rsh_delete} = $_cfg->{rsh_delete};
 }
 
 ###
-# copy a file using rsh to $_self->{hostname}.
+# copy a file to $_self->{hostname}.
 #
 # $_source - source file to be copied
 # $_target - destination $_source should be copied to
-# <- the return code 
+# <- the return code
 sub copy {
 
     my $_self   = shift;
     my $_source = shift;
     my $_target = shift;
 
-    my ( $out, $ret ) = $_self->do("$_self->{rcp_binary} $_self->{rcp_args} $_source $_self->{rcp_user}\@$_self->{hostname}:$_target");
+    my $cmdline = $_self->{rsh_copy};
+
+    $cmdline =~ s/SOURCE/$_source/g;
+    $cmdline =~ s/TARGET/$_target/g;
+    $cmdline =~ s/HOSTNAME/$_self->{hostname}/g;
+
+    my ( $out, $ret ) = $_self->do($cmdline);
+
     return $ret;
 }
 
 ###
-# execute the command using rsh on $_self->{hostname}.
+# execute the command on $_self->{hostname}.
 #
 # $_command - the command that should be executed
 # $_args    - arguments that should be supplied to $_command
-# <- the return code 
+# <- the return code
 sub execute {
 
     my $_self    = shift;
     my $_command = shift;
     my $_args    = shift;
 
-    my ( $out, $ret ) = $_self->do("$_self->{rsh_binary} $_self->{rsh_args} -l $_self->{rsh_user} $_self->{hostname} $_command $_args");
+    my $cmdline = $_self->{rsh_exec};
+
+    $cmdline =~ s/COMMAND/$_command/g;
+    $cmdline =~ s/ARGUMENTS/$_args/g;
+    $cmdline =~ s/HOSTNAME/$_self->{hostname}/g;
+
+    my ( $out, $ret ) = $_self->do($cmdline);
+
     return $ret;
 }
 
 ###
-# delete a file using rsh on $_self->{hostname}.
+# delete a file on $_self->{hostname}.
 #
-# $_file - the command that should be executed
-# <- the return code 
+# $_file - the file that should be deleted
+# <- the return code
 sub delete {
 
     my $_self = shift;
     my $_file = shift;
 
-    my ( $out, $ret ) = $_self->do("$_self->{rsh_binary} $_self->{rsh_args} -l $_self->{rsh_user} $_self->{hostname} rm -f \"$_file\"");
+    my $cmdline = $_self->{rsh_delete};
+
+    $cmdline =~ s/FILE/$_file/g;
+    $cmdline =~ s/HOSTNAME/$_self->{hostname}/g;
+
+    my ( $out, $ret ) = $_self->do($cmdline);
+
     return $ret;
 }
 
