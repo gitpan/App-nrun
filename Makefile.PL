@@ -8,8 +8,10 @@ WriteMakefile (
         'bin/nrun',
         'bin/ncopy',
     ],
+    'LICENSE' => 'gpl',
     'PREREQ_PM' => {
         "Date::Format" => 0,
+        "YAML"         => 0,
     },
 );
 

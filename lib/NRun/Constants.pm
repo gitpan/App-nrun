@@ -18,14 +18,19 @@
 #
 # Program: Constants.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Tue May 21 18:49:02 2013 +0200
-# Ident:   1f9621d3e8f9730a612900fb3f08e9ebdb14d9e8
+# Date:    Sat Jun 15 07:47:45 2013 +0200
+# Ident:   c83541ac1d378290dda6cd697ff1308439113a9c
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
 # 
 # Timo Benk : 2013-05-21 18:47:43 +0200 : parameter --async added
+# Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
 #
+
+###
+# this package contains globally used constants.
+###
 
 package NRun::Constants;
 
@@ -36,6 +41,9 @@ our $RSCD_NOT_ALIVE    = -251;
 our $EXECUTON_FAILED   = -250;
 our $MISSING_DNS_ENTRY = -249;
 our $PING_FAILED       = -248;
+our $CHECK_FAILED_PING = -247;
+our $CHECK_FAILED_NS   = -246;
+our $CHECK_FAILED_RSCD = -244;
 our $RSCD_ERROR        = -128;
 
 1;

@@ -6,7 +6,7 @@
    "dynamic_config" : 1,
    "generated_by" : "ExtUtils::MakeMaker version 6.6302, CPAN::Meta::Converter version 2.120630",
    "license" : [
-      "unknown"
+      "open_source"
    ],
    "meta-spec" : {
       "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
@@ -32,10 +32,11 @@
       },
       "runtime" : {
          "requires" : {
-            "Date::Format" : "0"
+            "Date::Format" : "0",
+            "YAML" : "0"
          }
       }
    },
    "release_status" : "testing",
-   "version" : "v1.0.0_6"
+   "version" : "v1.0.0_8"
 }

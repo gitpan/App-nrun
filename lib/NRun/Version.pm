@@ -18,8 +18,8 @@
 #
 # Program: Version.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Thu May 23 10:10:14 2013 +0200
-# Ident:   2417bffb5518f51e4fcbf4a90c942abf0ae73470
+# Date:    Sat Jun 15 07:47:45 2013 +0200
+# Ident:   c83541ac1d378290dda6cd697ff1308439113a9c
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -34,11 +34,17 @@
 # Timo Benk : 2013-05-13 19:02:35 +0200 : development release 1.0.0_4
 # Timo Benk : 2013-05-21 18:49:02 +0200 : development release 1.0.0_5
 # Timo Benk : 2013-05-23 10:10:14 +0200 : development release 1.0.0_6
+# Timo Benk : 2013-05-26 07:28:04 +0200 : development
+# Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
 #
+
+###
+# this package contains the nrun version string.
+###
 
 package NRun::Version;
 
 use version;
 
-our $VERSION = qv(1.0.0_6);
+our $VERSION = qv(1.0.0_8);
 

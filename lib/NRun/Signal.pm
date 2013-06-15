@@ -18,23 +18,32 @@
 #
 # Program: Signal.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Tue May 21 18:49:02 2013 +0200
-# Ident:   1f9621d3e8f9730a612900fb3f08e9ebdb14d9e8
+# Date:    Sat Jun 15 07:47:45 2013 +0200
+# Ident:   c83541ac1d378290dda6cd697ff1308439113a9c
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
 # 
 # Timo Benk : 2013-05-21 18:47:43 +0200 : parameter --async added
+# Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
 #
+
+###
+# this module is responsible for signal handling.
+#
+# multiple signal handlers for the same signal may be registered which will be 
+# called sequential in the opposite order the handlers were registered.
+###
 
 package NRun::Signal;
 
 ###
 # all handlers will be registered here
 my $HANDLERS = {};
+my $LOCK = 0;
 
 ###
-# local signal handlers.
+# local signal handler.
 #
 # calls all registered handlers in $HANDLERS.
 #
@@ -43,6 +52,9 @@ sub _handler {
 
     my $_signal = shift;
 
+    return if ($LOCK == 1);
+
+    $LOCK = 1;
     foreach my $handler (reverse(@{$HANDLERS->{$_signal}})) {
 
         my $sub = $handler->{callback};
@@ -54,6 +66,7 @@ sub _handler {
             $sub->(@$arg);
         }
     }
+    $LOCK = 0;
 }
 
 ###
@@ -107,7 +120,7 @@ sub deregister {
 
         if (scalar(@$handlers) == 0) {
 
-            $ENV{$_signal} = 'DEFAULT';
+            $SIG{$_signal} = 'DEFAULT';
         }
     }
 }

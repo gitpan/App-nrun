@@ -18,8 +18,8 @@
 #
 # Program: WorkerNsh.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Fri May 24 08:03:19 2013 +0200
-# Ident:   88db47d4612f4742ac757cc09f728ebcaf7f6815
+# Date:    Sat Jun 15 07:47:45 2013 +0200
+# Ident:   c83541ac1d378290dda6cd697ff1308439113a9c
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -31,7 +31,14 @@
 # Timo Benk : 2013-05-21 18:47:43 +0200 : parameter --async added
 # Timo Benk : 2013-05-23 17:26:57 +0200 : comment fixed for delete()
 # Timo Benk : 2013-05-24 08:03:19 +0200 : generic mode added
+# Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
+# Timo Benk : 2013-06-13 20:32:17 +0200 : using __PACKAGE__ is less error-prone
+# Timo Benk : 2013-06-15 07:33:51 +0200 : wrong variable was used in delete() and copy()
 #
+
+###
+# this worker implements nsh based remote execution
+###
 
 package NRun::Worker::WorkerNsh;
 
@@ -50,7 +57,7 @@ BEGIN {
 
         'MODE' => "nsh",
         'DESC' => "nsh based remote execution",
-        'NAME' => "NRun::Worker::WorkerNsh",
+        'NAME'   => __PACKAGE__,
     } );
 }
 
@@ -74,12 +81,9 @@ sub new {
 # $_cfg - parameter hash where
 # {
 #   'hostname'   - hostname this worker should act on
-#   'dumper'     - dumper object
-#   'logger'     - logger object
 #   'nsh_copy'   - commandline for the copy command (SOURCE, TARGET, HOSTNAME will be replaced)
 #   'nsh_exec'   - commandline for the exec command (COMMAND, ARGUMENTS, HOSTNAME will be replaced)
 #   'nsh_delete' - commandline for the delete command (FILE, HOSTNAME will be replaced)
-#   'nsh_check'  - commandline for the agentinfo check command (HOSTNAME will be replaced)
 # }
 sub init {
 
@@ -91,32 +95,6 @@ sub init {
     $_self->{nsh_copy}   = $_cfg->{nsh_copy};
     $_self->{nsh_exec}   = $_cfg->{nsh_exec};
     $_self->{nsh_delete} = $_cfg->{nsh_delete};
-    $_self->{nsh_check}  = $_cfg->{nsh_check};
-}
-
-###
-# do some general checks.
-#
-# - ping check will be checked if $_self->{skip_ns_check}
-# - dns check will be checked if $_self->{skip_dns_check}
-#
-# <- 1 on success and 0 on error
-sub pre_check {
-
-    my $_self = shift;
-
-    # nexec "steals" STDIN otherwise - no CTRL+C possible
-    close(STDIN);
-    open(STDIN, "/dev/null");
-
-    my $cmdline = $_self->{nsh_check};
-
-    $cmdline =~ s/HOSTNAME/$_self->{hostname}/g;
-
-    my ( $out, $ret ) = $_self->do($cmdline);
-    return 1 if ($ret != 0);
-
-    return $_self->SUPER::pre_check();
 }
 
 ###
@@ -141,8 +119,7 @@ sub copy {
     $cmdline =~ s/TARGET/$_target/g;
     $cmdline =~ s/HOSTNAME/$_self->{hostname}/g;
 
-    my ( $out, $ret ) = $_self->do($cmdline);
-    return $ret;
+    return $_self->do($cmdline);
 }
 
 ###
@@ -161,14 +138,13 @@ sub execute {
     close(STDIN);
     open(STDIN, "/dev/null");
 
-    my $cmdline = $_self->{nsh_copy};
+    my $cmdline = $_self->{nsh_exec};
 
     $cmdline =~ s/COMMAND/$_command/g;
     $cmdline =~ s/ARGUMENTS/$_args/g;
     $cmdline =~ s/HOSTNAME/$_self->{hostname}/g;
 
-    my ( $out, $ret ) = $_self->do($cmdline);
-    return $ret;
+    return $_self->do($cmdline);
 }
 
 ###
@@ -185,53 +161,12 @@ sub delete {
     close(STDIN);
     open(STDIN, "/dev/null");
 
-    my $cmdline = $_self->{nsh_copy};
+    my $cmdline = $_self->{nsh_delete};
 
     $cmdline =~ s/FILE/$_file/g;
     $cmdline =~ s/HOSTNAME/$_self->{hostname}/g;
 
-    my ( $out, $ret ) = $_self->do($cmdline);
-    return $ret;
-}
-
-###
-# execute $_cmd. will die on SIGALRM, SIGINT or SIGTERM.
-#
-# additionally to Worker::do() do() will scan command output
-# for nsh error messages.
-#
-# bladelogic seems to have a problem when doing too many parallel
-# requests at once. If this is the case and the action fails for that
-# reason, -128 is returned.
-#
-# $_cmd -  the command to be executed
-# <- (
-#      $out - command output
-#      $ret - the return code (-128 indicates too many parallel connections)
-#    )
-sub do {
-
-    my $_self = shift;
-    my $_cmd  = shift;
-
-    my ( $out, $ret ) = $_self->SUPER::do($_cmd);
-
-    # return -128 on messages indicating too many parallel connections
-    if (   grep(/SSO Error: Error reading server greeting/,            $out)
-        or grep(/SSO Error: Could not load credential cache file/,     $out)
-        or grep(/SSL_connect/,                                         $out)
-        or grep(/nexec: Error accessing host .* Connection timed out/, $out)
-        or grep(/Unable to reach .* Connection timed out/,             $out))
-    {
-
-        $_self->{dumper}->code($NRun::Constants::RSCD_ERROR);
-        $_self->{logger}->code($NRun::Constants::RSCD_ERROR);
-
-        return ( $out, $NRun::Constants::RSCD_ERROR );
-    }
-
-    return ( $out, $ret );
+    return $_self->do($cmdline);
 }
 
 1;
-

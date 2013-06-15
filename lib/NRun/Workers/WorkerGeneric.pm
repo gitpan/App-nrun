@@ -18,14 +18,21 @@
 #
 # Program: WorkerGeneric.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Fri May 24 08:03:19 2013 +0200
-# Ident:   88db47d4612f4742ac757cc09f728ebcaf7f6815
+# Date:    Sat Jun 15 07:47:45 2013 +0200
+# Ident:   c83541ac1d378290dda6cd697ff1308439113a9c
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
 # 
 # Timo Benk : 2013-05-24 08:03:19 +0200 : generic mode added
+# Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
+# Timo Benk : 2013-06-13 20:32:17 +0200 : using __PACKAGE__ is less error-prone
 #
+
+###
+# this is a generic worker implementation that can be used to add unimplemented
+# remote access mechanisms.
+###
 
 package NRun::Worker::WorkerGeneric;
 
@@ -44,7 +51,7 @@ BEGIN {
 
         'MODE' => "generic",
         'DESC' => "generic mode",
-        'NAME' => "NRun::Worker::WorkerGeneric",
+        'NAME'   => __PACKAGE__,
     } );
 }
 
@@ -69,8 +76,6 @@ sub new {
 # $_cfg - parameter hash where
 # {
 #   'hostname'       - hostname this worker should act on
-#   'dumper'         - dumper object
-#   'logger'         - logger object
 #   'generic_copy'   - commandline for the copy command (SOURCE, TARGET, HOSTNAME will be replaced)
 #   'generic_exec'   - commandline for the exec command (COMMAND, ARGUMENTS, HOSTNAME will be replaced)
 #   'generic_delete' - commandline for the delete command (FILE, HOSTNAME will be replaced)
@@ -105,9 +110,7 @@ sub copy {
     $cmdline =~ s/TARGET/$_target/g;
     $cmdline =~ s/HOSTNAME/$_self->{hostname}/g;
 
-    my ( $out, $ret ) = $_self->do($cmdline);
-
-    return $ret;
+    return $_self->do($cmdline);
 }
 
 ###
@@ -128,9 +131,7 @@ sub execute {
     $cmdline =~ s/ARGUMENTS/$_args/g;
     $cmdline =~ s/HOSTNAME/$_self->{hostname}/g;
 
-    my ( $out, $ret ) = $_self->do($cmdline);
-
-    return $ret;
+    return $_self->do($cmdline);
 }
 
 ###
@@ -148,10 +149,7 @@ sub delete {
     $cmdline =~ s/FILE/$_file/g;
     $cmdline =~ s/HOSTNAME/$_self->{hostname}/g;
 
-    my ( $out, $ret ) = $_self->do($cmdline);
-
-    return $ret;
+    return $_self->do($cmdline);
 }
 
 1;
-

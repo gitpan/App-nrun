@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with nrun.  If not, see <http://www.gnu.org/licenses/>.
 #
-# Program: Logger.pm
+# Program: Filter.pm
 # Author:  Timo Benk <benk@b1-systems.de>
 # Date:    Sat Jun 15 07:47:45 2013 +0200
 # Ident:   c83541ac1d378290dda6cd697ff1308439113a9c
@@ -24,20 +24,16 @@
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
 # 
-# Timo Benk : 2013-04-28 17:27:31 +0200 : initial checkin
-# Timo Benk : 2013-05-09 07:31:52 +0200 : fix race condition in semaphore cleanup code
-# Timo Benk : 2013-05-21 18:47:43 +0200 : parameter --async added
 # Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
 # Timo Benk : 2013-06-14 17:38:58 +0200 : --no-hostname option removed
 #
 
 ###
-# this is the base module for all logger implementations and
+# this is the base module for all filter implementations and
 # it is responsible for loading the available implementations
 # at runtime.
 #
-# a logger formats the ouput from the child processes and writes
-# this formatted output into a logfile.
+# a filter formats the ouput from the child processes.
 #
 # derived modules must implement the following subs's
 #
@@ -55,7 +51,7 @@
 # HOSTNAME;[stdout|stderr];TSTAMP;PID;PID(CHILD);[debug|error|exit|output|end];"OUTPUT"
 ###
 
-package NRun::Logger;
+package NRun::Filter;
 
 use strict;
 use warnings;
@@ -66,7 +62,7 @@ use File::Basename;
 # automagically load all available modules
 INIT {
 
-    my $basedir = dirname($INC{"NRun/Logger.pm"}) . "/Loggers";
+    my $basedir = dirname($INC{"NRun/Filter.pm"}) . "/Filters";
 
     opendir(DIR, $basedir) or die("$basedir: $!");
     while (my $module = readdir(DIR)) {
@@ -80,30 +76,30 @@ INIT {
 }
 
 ###
-# all available logger will be registered here
-my $loggers = {};
+# all available filters will be registered here
+my $filters = {};
 
 ###
-# will be called by the logger modules on INIT.
+# will be called by the filter modules on INIT.
 #
 # $_cfg - parameter hash where
 # {
-#   'LOGGER' - logger name
-#   'DESC'   - logger description
+#   'FILTER' - filter name
+#   'DESC'   - filter description
 #   'NAME'   - module name
 # }
 sub register {
 
     my $_cfg = shift;
 
-    $loggers->{$_cfg->{LOGGER}} = $_cfg;
+    $filters->{$_cfg->{FILTER}} = $_cfg;
 }
 
 ###
-# return all available logger modules
-sub loggers {
+# return all available filter modules
+sub filters {
 
-    return $loggers;
+    return $filters;
 }
 
 1;

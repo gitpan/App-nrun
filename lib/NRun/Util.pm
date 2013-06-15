@@ -19,15 +19,20 @@
 #
 # Program: Util.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Wed May 22 08:28:30 2013 +0200
-# Ident:   ae619a1a6133b11262638c980105af52999511ea
+# Date:    Sat Jun 15 07:47:45 2013 +0200
+# Ident:   c83541ac1d378290dda6cd697ff1308439113a9c
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
 # 
 # Timo Benk : 2013-05-13 11:12:49 +0200 : commandline syntax simplified
 # Timo Benk : 2013-05-22 08:28:30 +0200 : rc file uses now yaml syntax
+# Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
 #
+
+###
+# this package provides some utility functions.
+###
 
 package NRun::Util;
 
@@ -38,7 +43,7 @@ use YAML qw(LoadFile);
 use POSIX qw(getuid);
 
 ###
-# remove all duplicate entries from array
+# remove all duplicate entries from array.
 #
 # my @_arr - the array the duplicates should be removed from
 # <- the array with all duplicates removed from
@@ -96,7 +101,7 @@ sub resolve_target {
 }
 
 ###
-# return users home directory
+# return the users home directory.
 #
 # <- the current users home directory
 sub home {
@@ -105,7 +110,7 @@ sub home {
 }
 
 ###
-# read the hosts file.
+# read a file containing hostnames.
 #
 # $_file - the file containing the hostnames, one per line
 # <- an array containing all hostnames
@@ -124,7 +129,6 @@ sub read_hosts {
 
         if (not $host =~ /^ *$/) {
 
-            # filter out duplicate entries
             $hosts->{$host} = 1;
         }
     }
@@ -133,7 +137,7 @@ sub read_hosts {
 }
 
 ##
-# read configuration files
+# read the configuration files.
 #
 # $_files - the files to be read (values in last file will overwrite values in first file)
 sub read_config_files {
@@ -149,9 +153,14 @@ sub read_config_files {
             my $options = { %{LoadFile($file)} };
             my $aliases = merge($config->{alias}, $options->{alias});
 
+            my $args_nrun  = merge($config->{nrun}, $options->{nrun});
+            my $args_ncopy = merge($config->{ncopy}, $options->{ncopy});
+
             $config = merge($config, $options);
 
             $config->{alias} = $aliases; 
+            $config->{nrun}  = $args_nrun; 
+            $config->{ncopy} = $args_ncopy; 
         }
     }
 
@@ -177,6 +186,32 @@ sub merge {
     } 
 
     return { %$_h1, %$_h2 };
+}
+
+###
+# take all entries from @$_objects and distribute each entry evenly into
+# $_num new arrays.
+#
+# $_objects - the array to be splitted
+# $_num     - the number of arrays to be returned
+# <- a list of array references
+sub bunches {
+
+    my $_objects = shift;
+    my $_num     = shift;
+
+    my @bunches;
+    foreach my $idx (0..($_num-1)) {
+
+        $bunches[$idx] = [];
+    }
+
+    for (my $idx = 0; $idx < scalar(@{$_objects}); $idx++) {
+
+        push(@{$bunches[$idx % $_num]}, $_objects->[$idx]);
+    }
+
+    return @bunches;
 }
 
 1;
