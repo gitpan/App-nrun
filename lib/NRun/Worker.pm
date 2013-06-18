@@ -18,9 +18,9 @@
 #
 # Program: Worker.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Sat Jun 15 07:47:45 2013 +0200
-# Ident:   c83541ac1d378290dda6cd697ff1308439113a9c
-# Branch:  HEAD, origin/master, origin/HEAD, master
+# Date:    Tue Jun 18 14:32:15 2013 +0200
+# Ident:   c8aa7aa524efca900339f1fef0c19c2b1c5f8dc1
+# Branch:  HEAD, v1.0.0, origin/master, origin/HEAD, master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
 # 
