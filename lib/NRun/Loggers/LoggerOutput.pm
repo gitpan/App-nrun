@@ -18,8 +18,8 @@
 #
 # Program: LoggerOutput.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Tue Jun 18 14:32:15 2013 +0200
-# Ident:   c8aa7aa524efca900339f1fef0c19c2b1c5f8dc1
+# Date:    Thu Jun 20 13:15:16 2013 +0200
+# Ident:   d297da0e4f99160448131e356837143722675862
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -27,6 +27,7 @@
 # Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
 # Timo Benk : 2013-06-13 20:32:17 +0200 : using __PACKAGE__ is less error-prone
 # Timo Benk : 2013-06-14 17:38:58 +0200 : --no-hostname option removed
+# Timo Benk : 2013-06-20 13:15:16 +0200 : unbuffer writes to LOG
 #
 
 ###
@@ -83,6 +84,10 @@ sub init {
 
     $_self->{log_directory} = $_cfg->{log_directory};
     $_self->{logfile} = "$_self->{log_directory}/output.log";
+
+    select(LOG);
+    $| = 1;
+    select(STDOUT);
 
     open(LOG, ">>$_self->{logfile}") or die("$_self->{logfile}: $!");
 

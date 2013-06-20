@@ -19,8 +19,8 @@
 #
 # Program: ncopy
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Tue Jun 18 14:32:15 2013 +0200
-# Ident:   c8aa7aa524efca900339f1fef0c19c2b1c5f8dc1
+# Date:    Thu Jun 20 13:15:16 2013 +0200
+# Ident:   d297da0e4f99160448131e356837143722675862
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -57,6 +57,9 @@
 # Timo Benk : 2013-06-13 14:49:43 +0200 : missing File::Path added
 # Timo Benk : 2013-06-14 17:38:58 +0200 : --no-hostname option removed
 # Timo Benk : 2013-06-15 07:47:45 +0200 : use $BASE/ncopy as logdir
+# Timo Benk : 2013-06-20 09:08:16 +0200 : code cleanup
+# Timo Benk : 2013-06-20 13:00:29 +0200 : missing File::Temp add;
+# Timo Benk : 2013-06-20 13:06:40 +0200 : missing sub handler_cleanup() added
 #
 
 package App::ncopy;
@@ -70,6 +73,7 @@ use lib "$FindBin::Bin/../lib/perl5";
 
 use File::Path;
 use File::Basename;
+use File::Temp qw(tempfile);
 use Date::Format;
 use Getopt::Long;
 
@@ -78,7 +82,6 @@ use NRun::Version;
 use NRun::Check;
 use NRun::Filter;
 use NRun::Logger;
-use NRun::Callback;
 use NRun::Worker;
 use NRun::Signal;
 use NRun::Logger;
@@ -303,11 +306,28 @@ sub parse_commandline {
 }
 
 ###
-# callback function used by the dispatcher
+# ensure cleanup on TERM, INT and ALRM
+sub handler_cleanup {
+
+    my $_worker  = shift;
+    my $_command = shift;
+    my $_copy    = shift;
+
+    $$_worker->end();
+
+    if (defined($$_copy)) {
+
+        $$_worker->delete($$_command) if (defined($$_copy));
+    }
+}
+
+###
+# callback function used by the dispatcher (child context)
 sub callback {
     
     my $_host = shift;
 
+    # initialize the worker object
     my $worker = NRun::Worker::workers()->{$options->{mode}}->{NAME}->new();
 
     $worker->init (
@@ -317,6 +337,7 @@ sub callback {
         }
     );
 
+    # initialize the check objects
     my @checks;
     foreach my $check (@{$options->{check}}) {
 
@@ -332,14 +353,20 @@ sub callback {
         push(@checks, $c);
     }
 
-    $options->{sink}->connect();
+    # execute all check objects
+    foreach my $check (@checks) {
 
-    NRun::Callback::ncopy (
-        $worker,
-        $options->{source},
-        $options->{destination},
-        \@checks
-    );
+        if (not $check->execute()) {
+
+            $worker->end();
+            return;
+        }
+    }
+
+    # finally copy the file
+    $worker->copy($options->{source}, $options->{destination});
+
+    $worker->end();
 }
 
 ###

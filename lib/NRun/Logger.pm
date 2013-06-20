@@ -18,9 +18,9 @@
 #
 # Program: Logger.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Tue Jun 18 14:32:15 2013 +0200
-# Ident:   c8aa7aa524efca900339f1fef0c19c2b1c5f8dc1
-# Branch:  HEAD, v1.0.0, origin/master, origin/HEAD, master
+# Date:    Thu Jun 20 13:15:16 2013 +0200
+# Ident:   d297da0e4f99160448131e356837143722675862
+# Branch:  HEAD, v1.0.1, origin/master, origin/HEAD, master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
 # 
