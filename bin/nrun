@@ -19,8 +19,8 @@
 #
 # Program: nrun
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Thu Jun 20 13:15:16 2013 +0200
-# Ident:   d297da0e4f99160448131e356837143722675862
+# Date:    Fri Jun 21 14:03:21 2013 +0200
+# Ident:   0818e019ebaab32444fb4043e58120e8d3c0d29b
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -64,6 +64,12 @@
 # Timo Benk : 2013-06-20 09:08:16 +0200 : code cleanup
 # Timo Benk : 2013-06-20 13:00:29 +0200 : missing File::Temp add;
 # Timo Benk : 2013-06-20 13:06:40 +0200 : missing sub handler_cleanup() added
+# Timo Benk : 2013-06-20 19:33:33 +0200 : raise condition in signal handling code fixed
+# Timo Benk : 2013-06-21 09:44:13 +0200 : reverse copy support added
+# Timo Benk : 2013-06-21 11:18:58 +0200 : wait for child processed before exit()
+# Timo Benk : 2013-06-21 13:05:20 +0200 : $options->{ppid} was not set
+# Timo Benk : 2013-06-21 13:41:01 +0200 : handler() was missed sometimes
+# Timo Benk : 2013-06-21 14:03:21 +0200 : do not exit in handler() when in parent context
 #
 
 package App::nrun;
@@ -80,6 +86,7 @@ use File::Basename;
 use File::Temp qw(tempfile);
 use Date::Format;
 use Getopt::Long;
+use POSIX qw(:sys_wait_h);
 
 use NRun::Util;
 use NRun::Version;
@@ -331,9 +338,16 @@ sub callback {
     
     my $_host = shift;
 
-    # initialize the worker object
     my $worker = NRun::Worker::workers()->{$options->{mode}}->{NAME}->new();
 
+    # register signal handlers
+    my $command = $options->{command};
+
+    my $handler_term = NRun::Signal::register('TERM', \&handler_cleanup, [ \$worker, \$command, \$options->{copy} ]);
+    my $handler_int  = NRun::Signal::register('INT',  \&handler_cleanup, [ \$worker, \$command, \$options->{copy} ]);
+    my $handler_alrm = NRun::Signal::register('ALRM', \&handler_cleanup, [ \$worker, \$command, \$options->{copy} ]);
+
+    # initialize the worker object
     $worker->init (
         {
             %$options,
@@ -356,13 +370,6 @@ sub callback {
 
         push(@checks, $c);
     }
-
-    # register signal handlers
-    my $command = $options->{command};
-
-    my $handler_term = NRun::Signal::register('TERM', \&handler_cleanup, [ \$worker, \$command, \$options->{copy} ]);
-    my $handler_int  = NRun::Signal::register('INT',  \&handler_cleanup, [ \$worker, \$command, \$options->{copy} ]);
-    my $handler_alrm = NRun::Signal::register('ALRM', \&handler_cleanup, [ \$worker, \$command, \$options->{copy} ]);
 
     # execute all check objects
     foreach my $check (@checks) {
@@ -407,10 +414,14 @@ sub callback {
 # ensure exit on SIGINT/SIGTERM
 sub handler {
 
-    if (not $options->{ppid} eq $$) {
+    my $_options = shift;
+
+    if (not $$_options->{ppid} eq $$) {
 
         exit();
     }
+
+    while (waitpid(-1, WNOHANG) != -1) { };
 }
 
 ###
@@ -444,9 +455,6 @@ sub sink_init() {
 # main
 sub main {
 
-    NRun::Signal::register('TERM', \&handler);
-    NRun::Signal::register('INT',  \&handler);
-
     $options = NRun::Util::read_config_files (
         [
             "$FindBin::Bin/../etc/nrunrc",
@@ -456,6 +464,9 @@ sub main {
     );
 
     $options->{ppid} = $$;
+
+    NRun::Signal::register('TERM', \&handler, [ \$options ]);
+    NRun::Signal::register('INT',  \&handler, [ \$options ]);
 
     parse_commandline();
 
@@ -549,6 +560,15 @@ does matter (YAML syntax).
         -o LogLevel=FATAL
         SOURCE HOSTNAME:TARGET
     
+    ssh_rcopy: >
+        /usr/bin/scp
+        -o User=root
+        -o PreferredAuthentications=hostbased,publickey
+        -o StrictHostKeyChecking=no
+        -o UserKnownHostsFile=/dev/null
+        -o LogLevel=FATAL
+        HOSTNAME:SOURCE TARGET
+    
     ssh_exec: >
         /usr/bin/ssh
         -o User=root
@@ -620,6 +640,8 @@ the following configuration options must be set in the configuration file:
 
 'ssh_copy'   - commandline for remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
 
+'ssh_rcopy'  - commandline for reverse remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
+
 'ssh_delete' - commandline for remote deletion (FILE, HOSTNAME will be replaced)
 
 for passwordless login ssh-agent can be used:
@@ -649,6 +671,8 @@ the following configuration options must be set in the configuration file:
 
 'rsh_copy'   - commandline for remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
 
+'rsh_rcopy'  - commandline for reverse remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
+
 'rsh_delete' - commandline for remote deletion (FILE, HOSTNAME will be replaced)
 
 =head2 mode local
@@ -668,6 +692,8 @@ the following configuration options must be set in the configuration file:
 
 'nsh_copy'   - commandline for remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
 
+'nsh_rcopy'  - commandline for reverse remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
+
 'nsh_delete' - commandline for remote deletion (FILE, HOSTNAME will be replaced)
 
 'nsh_check'  - commandline for the agentinfo check command (HOSTNAME will be replaced)
@@ -681,6 +707,8 @@ mechanisms.
 
 'generic_copy'   - commandline for remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
 
+'generic_rcopy'  - commandline for reverse remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
+
 'generic_delete' - commandline for remote deletion (FILE, HOSTNAME will be replaced)
 
 an example that resembles the mode ssh would look the following way:
@@ -693,6 +721,15 @@ an example that resembles the mode ssh would look the following way:
         -o UserKnownHostsFile=/dev/null
         -o LogLevel=FATAL
         SOURCE HOSTNAME:TARGET
+    
+    generic_rcopy: >
+        /usr/bin/scp
+        -o User=root
+        -o PreferredAuthentications=hostbased,publickey
+        -o StrictHostKeyChecking=no
+        -o UserKnownHostsFile=/dev/null
+        -o LogLevel=FATAL
+        HOSTNAME:SOURCE TARGET
     
     generic_exec: >
         /usr/bin/ssh

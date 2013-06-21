@@ -19,8 +19,8 @@
 #
 # Program: Util.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Thu Jun 20 13:15:16 2013 +0200
-# Ident:   d297da0e4f99160448131e356837143722675862
+# Date:    Fri Jun 21 13:40:29 2013 +0200
+# Ident:   fd864e710e873926e562a8c940181bf7d0115e1d
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -28,6 +28,7 @@
 # Timo Benk : 2013-05-13 11:12:49 +0200 : commandline syntax simplified
 # Timo Benk : 2013-05-22 08:28:30 +0200 : rc file uses now yaml syntax
 # Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
+# Timo Benk : 2013-06-21 13:40:29 +0200 : speed optimization for resolve_target()
 #
 
 ###
@@ -84,17 +85,17 @@ sub resolve_target {
 
         foreach my $tgt (@{$_alias->{$_tgt}}) {
 
-            @targets = ( @targets, resolve_target($tgt, $_alias, $_seen) );
+            push(@targets, resolve_target($tgt, $_alias, $_seen));
         }
     } elsif (-e $_tgt) {
 
         foreach my $tgt (read_hosts($_tgt)) {
 
-            @targets = ( @targets, resolve_target($tgt, $_alias, $_seen) );
+            push(@targets, resolve_target($tgt, $_alias, $_seen));
         }
     } else {
 
-        @targets = ( $_tgt );
+        push(@targets, $_tgt);
     }
 
     return @targets;

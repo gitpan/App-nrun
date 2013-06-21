@@ -18,8 +18,8 @@
 #
 # Program: WorkerLocal.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Thu Jun 20 13:15:16 2013 +0200
-# Ident:   d297da0e4f99160448131e356837143722675862
+# Date:    Fri Jun 21 09:44:13 2013 +0200
+# Ident:   77f0de4827fac44f3803b0912888b88d0df0f3dc
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -33,6 +33,7 @@
 # Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
 # Timo Benk : 2013-06-13 20:32:17 +0200 : using __PACKAGE__ is less error-prone
 # Timo Benk : 2013-06-14 12:53:08 +0200 : $_self->{O|E} must be used instead of STD{OUT|ERR}
+# Timo Benk : 2013-06-21 09:44:13 +0200 : reverse copy support added
 #
 
 ###
@@ -90,6 +91,23 @@ sub init {
     $_self->SUPER::init($_cfg);
 
     $_self->{local_exec}   = $_cfg->{local_exec};
+}
+
+###
+# copy a file from $_self->{hostname}.
+#
+# $_source - source file to be copied
+# $_target - destination $_source should be copied to
+# <- the return code
+sub rcopy {
+
+    my $_self   = shift;
+    my $_source = shift;
+    my $_target = shift;
+
+    print {$_self->{E}} "$_self->{hostname};stderr;" . time() . ";$$;n/a;error;\"not implemented\"\n";
+
+    return 1;
 }
 
 ###

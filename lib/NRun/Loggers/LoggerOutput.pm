@@ -18,8 +18,8 @@
 #
 # Program: LoggerOutput.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Thu Jun 20 13:15:16 2013 +0200
-# Ident:   d297da0e4f99160448131e356837143722675862
+# Date:    Thu Jun 20 19:35:35 2013 +0200
+# Ident:   3fa4f4538d6472db1f6b4fd7b2c36402918fbce6
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s

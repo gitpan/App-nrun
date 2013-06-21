@@ -18,8 +18,8 @@
 #
 # Program: WorkerGeneric.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Thu Jun 20 13:15:16 2013 +0200
-# Ident:   d297da0e4f99160448131e356837143722675862
+# Date:    Fri Jun 21 09:44:13 2013 +0200
+# Ident:   77f0de4827fac44f3803b0912888b88d0df0f3dc
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -27,6 +27,7 @@
 # Timo Benk : 2013-05-24 08:03:19 +0200 : generic mode added
 # Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
 # Timo Benk : 2013-06-13 20:32:17 +0200 : using __PACKAGE__ is less error-prone
+# Timo Benk : 2013-06-21 09:44:13 +0200 : reverse copy support added
 #
 
 ###
@@ -76,6 +77,7 @@ sub new {
 # $_cfg - parameter hash where
 # {
 #   'hostname'       - hostname this worker should act on
+#   'generic_rcopy'  - commandline for the rcopy command (SOURCE, TARGET, HOSTNAME will be replaced)
 #   'generic_copy'   - commandline for the copy command (SOURCE, TARGET, HOSTNAME will be replaced)
 #   'generic_exec'   - commandline for the exec command (COMMAND, ARGUMENTS, HOSTNAME will be replaced)
 #   'generic_delete' - commandline for the delete command (FILE, HOSTNAME will be replaced)
@@ -87,6 +89,7 @@ sub init {
 
     $_self->SUPER::init($_cfg);
 
+    $_self->{generic_rcopy}  = $_cfg->{generic_rcopy};
     $_self->{generic_copy}   = $_cfg->{generic_copy};
     $_self->{generic_exec}   = $_cfg->{generic_exec};
     $_self->{generic_delete} = $_cfg->{generic_delete};
@@ -108,6 +111,27 @@ sub copy {
 
     $cmdline =~ s/SOURCE/$_source/g;
     $cmdline =~ s/TARGET/$_target/g;
+    $cmdline =~ s/HOSTNAME/$_self->{hostname}/g;
+
+    return $_self->do($cmdline);
+}
+
+###
+# copy a file from $_self->{hostname}.
+#
+# $_source - source file to be copied
+# $_target - destination $_source should be copied to
+# <- the return code
+sub rcopy {
+
+    my $_self   = shift;
+    my $_source = shift;
+    my $_target = shift;
+
+    my $cmdline = $_self->{generic_rcopy};
+
+    $cmdline =~ s/SOURCE/$_source/g;
+    $cmdline =~ s/TARGET/$_target.$_self->{hostname}/g;
     $cmdline =~ s/HOSTNAME/$_self->{hostname}/g;
 
     return $_self->do($cmdline);

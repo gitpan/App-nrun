@@ -18,8 +18,8 @@
 #
 # Program: WorkerNsh.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Thu Jun 20 13:15:16 2013 +0200
-# Ident:   d297da0e4f99160448131e356837143722675862
+# Date:    Fri Jun 21 09:44:13 2013 +0200
+# Ident:   77f0de4827fac44f3803b0912888b88d0df0f3dc
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -34,6 +34,7 @@
 # Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
 # Timo Benk : 2013-06-13 20:32:17 +0200 : using __PACKAGE__ is less error-prone
 # Timo Benk : 2013-06-15 07:33:51 +0200 : wrong variable was used in delete() and copy()
+# Timo Benk : 2013-06-21 09:44:13 +0200 : reverse copy support added
 #
 
 ###
@@ -81,6 +82,7 @@ sub new {
 # $_cfg - parameter hash where
 # {
 #   'hostname'   - hostname this worker should act on
+#   'nsh_rcopy'  - commandline for the rcopy command (SOURCE, TARGET, HOSTNAME will be replaced)
 #   'nsh_copy'   - commandline for the copy command (SOURCE, TARGET, HOSTNAME will be replaced)
 #   'nsh_exec'   - commandline for the exec command (COMMAND, ARGUMENTS, HOSTNAME will be replaced)
 #   'nsh_delete' - commandline for the delete command (FILE, HOSTNAME will be replaced)
@@ -92,9 +94,35 @@ sub init {
 
     $_self->SUPER::init($_cfg);
 
+    $_self->{nsh_rcopy}  = $_cfg->{nsh_rcopy};
     $_self->{nsh_copy}   = $_cfg->{nsh_copy};
     $_self->{nsh_exec}   = $_cfg->{nsh_exec};
     $_self->{nsh_delete} = $_cfg->{nsh_delete};
+}
+
+###
+# copy a file from $_self->{hostname}.
+#
+# $_source - source file to be copied
+# $_target - destination $_source should be copied to
+# <- the return code
+sub rcopy {
+
+    my $_self   = shift;
+    my $_source = shift;
+    my $_target = shift;
+
+    # nexec "steals" STDIN otherwise - no CTRL+C possible
+    close(STDIN);
+    open(STDIN, "/dev/null");
+
+    my $cmdline = $_self->{nsh_rcopy};
+
+    $cmdline =~ s/SOURCE/$_source/g;
+    $cmdline =~ s/TARGET/$_target/g;
+    $cmdline =~ s/HOSTNAME/$_self->{hostname}/g;
+
+    return $_self->do($cmdline);
 }
 
 ###

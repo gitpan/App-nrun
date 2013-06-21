@@ -19,8 +19,8 @@
 #
 # Program: ncopy
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Thu Jun 20 13:15:16 2013 +0200
-# Ident:   d297da0e4f99160448131e356837143722675862
+# Date:    Fri Jun 21 14:03:21 2013 +0200
+# Ident:   0818e019ebaab32444fb4043e58120e8d3c0d29b
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -60,6 +60,12 @@
 # Timo Benk : 2013-06-20 09:08:16 +0200 : code cleanup
 # Timo Benk : 2013-06-20 13:00:29 +0200 : missing File::Temp add;
 # Timo Benk : 2013-06-20 13:06:40 +0200 : missing sub handler_cleanup() added
+# Timo Benk : 2013-06-20 19:32:58 +0200 : unused sub handler_cleanup() removed
+# Timo Benk : 2013-06-21 09:44:13 +0200 : reverse copy support added
+# Timo Benk : 2013-06-21 11:18:58 +0200 : wait for child processed before exit()
+# Timo Benk : 2013-06-21 13:05:20 +0200 : $options->{ppid} was not set
+# Timo Benk : 2013-06-21 13:41:01 +0200 : handler() was missed sometimes
+# Timo Benk : 2013-06-21 14:03:21 +0200 : do not exit in handler() when in parent context
 #
 
 package App::ncopy;
@@ -76,6 +82,7 @@ use File::Basename;
 use File::Temp qw(tempfile);
 use Date::Format;
 use Getopt::Long;
+use POSIX qw(:sys_wait_h);
 
 use NRun::Util;
 use NRun::Version;
@@ -97,6 +104,7 @@ sub usage {
     print "usage: " . basename($0) . " -t HOST1[,HOST2,...] -- SOURCE TARGET\n";
     print "--log-directory DIR         base directory for the log files.\n";
     print "--parallel,-p MAX           number of parallel connections (defaults to 5).\n";
+    print "--reverse,-r                reverse copy the source file from all target hosts.\n";
     print "--target,-t HOST1,HOST2     comma separated list of target hosts.\n";
     print "--timeout SEC               timeout for each command execution (defaults to 60).\n";
     print "--version,-v                print the version string and exit.\n";
@@ -171,6 +179,7 @@ sub parse_commandline {
     my $arg_logger        = $options->{ncopy}->{arg_logger};
     my $arg_check         = $options->{ncopy}->{arg_check};
     my $arg_version       = $options->{ncopy}->{arg_version};
+    my $arg_rcopy         = $options->{ncopy}->{arg_rcopy};
     my $arg_timeout       = $options->{ncopy}->{arg_timeout};
 
     my $ret = GetOptions (
@@ -180,6 +189,7 @@ sub parse_commandline {
         "timeout=i"       => \$arg_timeout,
         "mode|m=s"        => \$arg_mode,
         "filter|f=s"      => \$arg_filter,
+        "reverse|r"       => \$arg_rcopy,
         "logger|l=s"      => \$arg_logger,
         "check|c=s"       => \$arg_check, 
         "version|v"       => \$arg_version,
@@ -232,6 +242,7 @@ sub parse_commandline {
     $options->{source}      = $ARGV[0];
     $options->{destination} = $ARGV[1];
     $options->{timeout}     = $arg_timeout ? $arg_timeout : 60;
+    $options->{rcopy}       = $arg_rcopy;
     $options->{mode}        = lc($arg_mode);
     $options->{filter}      = lc($arg_filter);
     $options->{logger}      = [ map { lc } split(",", $arg_logger) ];
@@ -306,22 +317,6 @@ sub parse_commandline {
 }
 
 ###
-# ensure cleanup on TERM, INT and ALRM
-sub handler_cleanup {
-
-    my $_worker  = shift;
-    my $_command = shift;
-    my $_copy    = shift;
-
-    $$_worker->end();
-
-    if (defined($$_copy)) {
-
-        $$_worker->delete($$_command) if (defined($$_copy));
-    }
-}
-
-###
 # callback function used by the dispatcher (child context)
 sub callback {
     
@@ -364,7 +359,19 @@ sub callback {
     }
 
     # finally copy the file
-    $worker->copy($options->{source}, $options->{destination});
+    if (defined($options->{rcopy})) {
+
+        my $dst = "$options->{destination}.$_host";
+        if (-e $options->{destination} and -d $options->{destination}) {
+   
+            $dst = "$options->{destination}/" . basename($options->{source}) . ".$_host";
+        }
+
+        $worker->rcopy($options->{source}, $dst);
+    } else {
+
+        $worker->copy($options->{source}, $options->{destination});
+    }
 
     $worker->end();
 }
@@ -373,10 +380,14 @@ sub callback {
 # ensure exit on SIGINT/SIGTERM
 sub handler {
 
-    if (not $options->{ppid} eq $$) {
+    my $_options = shift;
+
+    if (not $$_options->{ppid} eq $$) {
 
         exit();
     }
+
+    while (waitpid(-1, WNOHANG) != -1) { };
 }
 
 ###
@@ -410,9 +421,6 @@ sub sink_init() {
 # main
 sub main {
 
-    NRun::Signal::register('TERM', \&handler);
-    NRun::Signal::register('INT',  \&handler);
-
     $options = NRun::Util::read_config_files (
         [
             "$FindBin::Bin/../etc/nrunrc",
@@ -420,6 +428,11 @@ sub main {
             NRun::Util::home() . "/.nrunrc" 
         ]
     );
+
+    $options->{ppid} = $$;
+
+    NRun::Signal::register('TERM', \&handler, [ \$options ]);
+    NRun::Signal::register('INT',  \&handler, [ \$options ]);
 
     parse_commandline();
 
@@ -477,6 +490,8 @@ B<--mode,-m MODE>                remote execution mode (see MODES).
 
 B<--parallel,-p MAX>             number of parallel connections (defaults to 5).
 
+B<--reverse,-r>                  reverse copy the source file from all target hosts.
+
 B<--target,-t HOST1[,HOST2,...]> comma separated list of target hosts (see TARGETS).
 
 B<--timeout SEC>                 timeout for each command execution (defaults to 60).
@@ -508,6 +523,15 @@ does matter (YAML syntax).
         -o UserKnownHostsFile=/dev/null
         -o LogLevel=FATAL
         SOURCE HOSTNAME:TARGET
+    
+    ssh_rcopy: >
+        /usr/bin/scp
+        -o User=root
+        -o PreferredAuthentications=hostbased,publickey
+        -o StrictHostKeyChecking=no
+        -o UserKnownHostsFile=/dev/null
+        -o LogLevel=FATAL
+        HOSTNAME:SOURCE TARGET
     
     ssh_exec: >
         /usr/bin/ssh
@@ -580,6 +604,8 @@ the following configuration options must be set in the configuration file:
 
 'ssh_copy'   - commandline for remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
 
+'ssh_rcopy'  - commandline for reverse remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
+
 'ssh_delete' - commandline for remote deletion (FILE, HOSTNAME will be replaced)
 
 for passwordless login ssh-agent can be used:
@@ -609,6 +635,8 @@ the following configuration options must be set in the configuration file:
 
 'rsh_copy'   - commandline for remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
 
+'rsh_rcopy'  - commandline for reverse remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
+
 'rsh_delete' - commandline for remote deletion (FILE, HOSTNAME will be replaced)
 
 =head2 mode local
@@ -628,6 +656,8 @@ the following configuration options must be set in the configuration file:
 
 'nsh_copy'   - commandline for remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
 
+'nsh_rcopy'  - commandline for reverse remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
+
 'nsh_delete' - commandline for remote deletion (FILE, HOSTNAME will be replaced)
 
 'nsh_check'  - commandline for the agentinfo check command (HOSTNAME will be replaced)
@@ -641,6 +671,8 @@ mechanisms.
 
 'generic_copy'   - commandline for remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
 
+'generic_rcopy'  - commandline for reverse remote copying (SOURCE, TARGET, HOSTNAME will be replaced)
+
 'generic_delete' - commandline for remote deletion (FILE, HOSTNAME will be replaced)
 
 an example that resembles the mode ssh would look the following way:
@@ -653,6 +685,15 @@ an example that resembles the mode ssh would look the following way:
         -o UserKnownHostsFile=/dev/null
         -o LogLevel=FATAL
         SOURCE HOSTNAME:TARGET
+    
+    generic_rcopy: >
+        /usr/bin/scp
+        -o User=root
+        -o PreferredAuthentications=hostbased,publickey
+        -o StrictHostKeyChecking=no
+        -o UserKnownHostsFile=/dev/null
+        -o LogLevel=FATAL
+        HOSTNAME:SOURCE TARGET
     
     generic_exec: >
         /usr/bin/ssh
@@ -779,9 +820,13 @@ indentation does matter.
 
 =head1 EXAMPLES
 
-1. copy file test.tar to host1, host2 and all hosts in the file HOSTS.LST
+1. copy file test.tar to all hosts in the file HOSTS.LST
 
 	$ ncopy --target HOSTS.LST -- test.tar /tmp 
+
+2. reverse copy file /etc/passwd from all hosts in the file HOSTS.LST
+
+	$ ncopy --target HOSTS.LST --reverse -- /etc/passwd /tmp 
 
 =head1 NOTES
 
