@@ -18,14 +18,15 @@
 #
 # Program: Signal.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Thu Jun 20 19:35:35 2013 +0200
-# Ident:   3fa4f4538d6472db1f6b4fd7b2c36402918fbce6
+# Date:    Mon Jul 8 18:32:15 2013 +0200
+# Ident:   9aabc196df582c9b4ee3874e36e58d9f53d4e214
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
 # 
 # Timo Benk : 2013-05-21 18:47:43 +0200 : parameter --async added
 # Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
+# Timo Benk : 2013-07-08 14:16:38 +0200 : callback() was continued on SIGALRM
 #
 
 ###
@@ -55,18 +56,26 @@ sub _handler {
     return if ($LOCK == 1);
 
     $LOCK = 1;
-    foreach my $handler (reverse(@{$HANDLERS->{$_signal}})) {
+    eval {
 
-        my $sub = $handler->{callback};
-        my $arg = $handler->{arguments};
-        my $pid = $handler->{pid};
+        foreach my $handler (reverse(@{$HANDLERS->{$_signal}})) {
 
-        if (not defined($pid) or $pid == $$ ) {
+            my $sub = $handler->{callback};
+            my $arg = $handler->{arguments};
+            my $pid = $handler->{pid};
 
-            $sub->(@$arg);
+            if (not defined($pid) or $pid == $$ ) {
+
+                $sub->(@$arg);
+            }
         }
-    }
-    $LOCK = 0;
+     };
+     if ($@) {
+
+         $LOCK = 0;
+         die ($@);
+     }
+     $LOCK = 0;
 }
 
 ###

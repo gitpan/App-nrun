@@ -18,14 +18,15 @@
 #
 # Program: Pool.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Thu Jun 20 19:35:35 2013 +0200
-# Ident:   3fa4f4538d6472db1f6b4fd7b2c36402918fbce6
+# Date:    Mon Jul 8 18:32:15 2013 +0200
+# Ident:   9aabc196df582c9b4ee3874e36e58d9f53d4e214
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
 # 
 # Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
 # Timo Benk : 2013-06-14 18:05:08 +0200 : deliver sig[int|term] to all pool processes
+# Timo Benk : 2013-07-08 14:16:38 +0200 : callback() was continued on SIGALRM
 #
 
 ###
@@ -93,6 +94,13 @@ sub handler_term {
 }
 
 ###
+# break out of callback()
+sub handler_alrm {
+
+    die();
+}
+
+###
 # dispatch the worker processes.
 sub init {
 
@@ -113,12 +121,17 @@ sub init {
             die("error: unable to fork");
         } elsif ($pid == 0) {
 
+            my $handler_alrm = NRun::Signal::register('ALRM', \&handler_alrm, [ ], $$);
+
             $_self->{sink}->connect();
             foreach my $object (@$bunch) {
 
                 alarm($_self->{timeout});
 
-                $_self->{callback}->($object);
+                eval {
+
+                    $_self->{callback}->($object);
+                };
             };
             $_self->{sink}->disconnect();
 

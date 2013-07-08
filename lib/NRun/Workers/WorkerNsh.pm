@@ -18,8 +18,8 @@
 #
 # Program: WorkerNsh.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Fri Jun 21 09:44:13 2013 +0200
-# Ident:   77f0de4827fac44f3803b0912888b88d0df0f3dc
+# Date:    Mon Jul 8 18:32:15 2013 +0200
+# Ident:   9aabc196df582c9b4ee3874e36e58d9f53d4e214
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s

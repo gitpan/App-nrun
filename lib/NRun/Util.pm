@@ -19,8 +19,8 @@
 #
 # Program: Util.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Fri Jun 21 13:40:29 2013 +0200
-# Ident:   fd864e710e873926e562a8c940181bf7d0115e1d
+# Date:    Mon Jul 8 18:32:15 2013 +0200
+# Ident:   9aabc196df582c9b4ee3874e36e58d9f53d4e214
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -29,6 +29,7 @@
 # Timo Benk : 2013-05-22 08:28:30 +0200 : rc file uses now yaml syntax
 # Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
 # Timo Benk : 2013-06-21 13:40:29 +0200 : speed optimization for resolve_target()
+# Timo Benk : 2013-07-08 15:59:06 +0200 : hostnames may be given via stdin
 #
 
 ###
@@ -81,21 +82,24 @@ sub resolve_target {
 
     my @targets;
 
-    if (defined($_alias) and defined($_alias->{$_tgt})) {
+    foreach my $token (split(/[ ,]/, $_tgt)) {
 
-        foreach my $tgt (@{$_alias->{$_tgt}}) {
-
-            push(@targets, resolve_target($tgt, $_alias, $_seen));
+        if (defined($_alias) and defined($_alias->{$token})) {
+    
+            foreach my $tgt (@{$_alias->{$token}}) {
+    
+                push(@targets, resolve_target($tgt, $_alias, $_seen));
+            }
+        } elsif (-e $token or $token eq "-") {
+    
+            foreach my $tgt (read_hosts($token)) {
+    
+                push(@targets, resolve_target($tgt, $_alias, $_seen));
+            }
+        } else {
+    
+            push(@targets, $token);
         }
-    } elsif (-e $_tgt) {
-
-        foreach my $tgt (read_hosts($_tgt)) {
-
-            push(@targets, resolve_target($tgt, $_alias, $_seen));
-        }
-    } else {
-
-        push(@targets, $_tgt);
     }
 
     return @targets;

@@ -18,8 +18,8 @@
 #
 # Program: Version.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Fri Jun 21 09:33:02 2013 +0200
-# Ident:   0a0888f029838afc5f9e5ef6753b7f5682eadab1
+# Date:    Mon Jul 8 18:32:15 2013 +0200
+# Ident:   9aabc196df582c9b4ee3874e36e58d9f53d4e214
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -39,6 +39,7 @@
 # Timo Benk : 2013-06-20 09:09:10 +0200 : version counter increased
 # Timo Benk : 2013-06-20 19:35:35 +0200 : version counter increased
 # Timo Benk : 2013-06-21 09:33:02 +0200 : version counter increased
+# Timo Benk : 2013-07-08 18:32:15 +0200 : version counter increased
 #
 
 ###
@@ -49,5 +50,5 @@ package NRun::Version;
 
 use version;
 
-our $VERSION = qv(1.1.0);
+our $VERSION = qv(1.1.1);
 
