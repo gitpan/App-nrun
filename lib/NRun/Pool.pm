@@ -18,8 +18,8 @@
 #
 # Program: Pool.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Mon Jul 8 18:32:15 2013 +0200
-# Ident:   9aabc196df582c9b4ee3874e36e58d9f53d4e214
+# Date:    Wed Jul 17 19:44:13 2013 +0200
+# Ident:   e81f2ed28d3a5b52045231c0700113b9349472fe
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -27,6 +27,8 @@
 # Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
 # Timo Benk : 2013-06-14 18:05:08 +0200 : deliver sig[int|term] to all pool processes
 # Timo Benk : 2013-07-08 14:16:38 +0200 : callback() was continued on SIGALRM
+# Timo Benk : 2013-07-11 14:02:09 +0200 : better cleanup handling in signal handlers
+# Timo Benk : 2013-07-12 15:13:08 +0200 : queue targets instead of splitting them
 #
 
 ###
@@ -48,7 +50,7 @@ use warnings;
 # $_obj - parameter hash where
 # {
 #   'timeout'  => timeout in seconds
-#   'objects'  => the target objects
+#   'queue'    => the queue object
 #   'nmax'     => maximum number of parallel login processes
 #   'callback' => callback function to be executed in parallel
 #                 signature: sub callback ($object)
@@ -65,7 +67,7 @@ sub new {
 
     $self->{timeout} = $_obj->{timeout};
     $self->{nmax}    = $_obj->{nmax};
-    $self->{objects} = $_obj->{objects};
+    $self->{queue}   = $_obj->{queue};
     $self->{sink}    = $_obj->{sink};
 
     $self->{callback} = $_obj->{callback};
@@ -97,7 +99,7 @@ sub handler_term {
 # break out of callback()
 sub handler_alrm {
 
-    die();
+    die("alarm\n");
 }
 
 ###
@@ -111,36 +113,60 @@ sub init {
     my $handler_int  = NRun::Signal::register('INT',  \&handler_int,  [ \@pids ], $$);
     my $handler_term = NRun::Signal::register('TERM', \&handler_term, [ \@pids ], $$);
     
-    foreach my $bunch (NRun::Util::bunches($_self->{objects}, $_self->{nmax})) {
- 
-        $_self->{sink}->pipe();
+    foreach my $process (1..$_self->{nmax}) {
 
-        my $pid = fork();
-        if (not defined $pid) {
+        $_self->{sink}->connect();
+        $_self->{queue}->connect();
 
-            die("error: unable to fork");
-        } elsif ($pid == 0) {
-
-            my $handler_alrm = NRun::Signal::register('ALRM', \&handler_alrm, [ ], $$);
-
-            $_self->{sink}->connect();
-            foreach my $object (@$bunch) {
-
-                alarm($_self->{timeout});
-
-                eval {
-
-                    $_self->{callback}->($object);
-                };
-            };
-            $_self->{sink}->disconnect();
-
-            exit(0);
-        } else {
-
-            push (@pids, $pid);
-        }
+        push(@pids, $_self->dispatch());
     }
+
+    $_self->{queue}->start();
+}
+
+###
+# dispatch a single worker process
+sub dispatch {
+
+    my $_self = shift;
+
+    my $pid = fork();
+    if (not defined $pid) {
+
+        die("error: unable to fork");
+    } elsif ($pid == 0) {
+
+        $_self->work();
+
+        exit(0);
+    }
+
+    return $pid;
+}
+
+###
+# do the actual work
+sub work {
+
+    my $_self = shift;
+
+    my $handler_alrm = NRun::Signal::register('ALRM', \&handler_alrm, [ ], $$);
+
+    $_self->{sink}->open();
+    while (my $object = $_self->{queue}->next()) {
+
+        eval {
+
+            alarm($_self->{timeout});
+            $_self->{callback}->($object);
+            alarm(0);
+        };
+        if ($@) {
+
+            die($@) unless ($@ eq "alarm\n");
+        }
+    };
+    $_self->{sink}->close();
 }
 
 1;

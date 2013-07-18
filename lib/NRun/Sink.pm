@@ -18,13 +18,14 @@
 #
 # Program: Sink.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Mon Jul 8 18:32:15 2013 +0200
-# Ident:   9aabc196df582c9b4ee3874e36e58d9f53d4e214
+# Date:    Wed Jul 17 19:44:13 2013 +0200
+# Ident:   e81f2ed28d3a5b52045231c0700113b9349472fe
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
 # 
 # Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
+# Timo Benk : 2013-07-12 15:13:08 +0200 : queue targets instead of splitting them
 #
 
 ###
@@ -85,13 +86,12 @@ sub init {
 }
 
 ###
-# create two additional pipes connected to this sink
-# object. each child process needs it's own pipes.
+# connect the currently running process to this sink.
 #
-# - must be called before each fork() 
-# - must be called before connect() or disconnect().
+# - must be called once before each fork() 
+# - must be called before process(), open() and close()
 # - must be called in the parent's context
-sub pipe() {
+sub connect() {
 
     my $_self = shift;
 
@@ -121,39 +121,36 @@ sub process {
     while (my @ready = $selector->can_read()) {
         
         foreach my $fh (@ready) {
-    
-            my $line = <$fh>;
 
-            foreach my $RDR1 (@{$_self->{RDR1}}) {
+            if (my $line = <$fh>) {
 
-                last if (not defined($line));
-                next if (not defined(fileno($RDR1)));
+                foreach my $RDR1 (@{$_self->{RDR1}}) {
 
-                if (fileno($fh) == fileno($RDR1)) {
+                    next if (not defined(fileno($RDR1)));
+
+                    if (fileno($fh) == fileno($RDR1)) {
         
-                    foreach my $filter (@{$_self->{filters}}) {
+                        foreach my $filter (@{$_self->{filters}}) {
     
-                        $filter->stdout($line);
+                            $filter->stdout($line);
+                        }
                     }
                 }
-            }
 
-            foreach my $RDR2 (@{$_self->{RDR2}}) {
+                foreach my $RDR2 (@{$_self->{RDR2}}) {
 
-                last if (not defined($line));
-                next if(not defined(fileno($RDR2)));
+                    next if(not defined(fileno($RDR2)));
 
-                if (fileno($fh) == fileno($RDR2)) {
+                    if (fileno($fh) == fileno($RDR2)) {
         
-                    foreach my $filter (@{$_self->{filters}}) {
+                        foreach my $filter (@{$_self->{filters}}) {
     
-                        $filter->stderr($line);
+                            $filter->stderr($line);
+                        }
                     }
                 }
-            }
+            } else {
 
-            if (eof($fh)) {
-            
                 $selector->remove($fh);
                 close($fh);
             }
@@ -166,7 +163,7 @@ sub process {
 # this sink.
 #
 # - must be called in the child's context
-sub connect() {
+sub open() {
 
     my $_self = shift;
 
@@ -194,14 +191,14 @@ sub connect() {
 # this sink.
 #
 # - must be called in the child's context
-sub disconnect() {
+sub close() {
 
     my $_self = shift;
 
     return if (not defined($_self->{OLDOUT}));
 
-    open(STDOUT, ">&" . fileno($_self->{OLDOUT})) or die ("unable to restore stdout: $!");
-    open(STDERR, ">&" . fileno($_self->{OLDERR})) or die ("unable to restore stderr: $!");
+    CORE::open(STDOUT, ">&" . fileno($_self->{OLDOUT})) or die ("unable to restore stdout: $!");
+    CORE::open(STDERR, ">&" . fileno($_self->{OLDERR})) or die ("unable to restore stderr: $!");
 
     delete($_self->{OLDOUT});
     delete($_self->{OLDERR});

@@ -20,4 +20,4 @@ no_index:
 requires:
   Date::Format: 0
   YAML: 0
-version: v1.1.1
+version: v1.1.2

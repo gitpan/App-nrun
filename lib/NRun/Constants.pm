@@ -18,14 +18,15 @@
 #
 # Program: Constants.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Mon Jul 8 18:32:15 2013 +0200
-# Ident:   9aabc196df582c9b4ee3874e36e58d9f53d4e214
+# Date:    Wed Jul 17 19:44:13 2013 +0200
+# Ident:   e81f2ed28d3a5b52045231c0700113b9349472fe
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
 # 
 # Timo Benk : 2013-05-21 18:47:43 +0200 : parameter --async added
 # Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
+# Timo Benk : 2013-07-15 18:23:58 +0200 : $EXECUTION_FAILED was mis-spelled
 #
 
 ###
@@ -38,7 +39,7 @@ our $CODE_SIGINT       = -255;
 our $CODE_SIGTERM      = -254;
 our $CODE_SIGALRM      = -253;
 our $RSCD_NOT_ALIVE    = -251;
-our $EXECUTON_FAILED   = -250;
+our $EXECUTION_FAILED  = -250;
 our $MISSING_DNS_ENTRY = -249;
 our $PING_FAILED       = -248;
 our $CHECK_FAILED_PING = -247;

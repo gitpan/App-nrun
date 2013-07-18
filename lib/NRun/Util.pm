@@ -19,8 +19,8 @@
 #
 # Program: Util.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Mon Jul 8 18:32:15 2013 +0200
-# Ident:   9aabc196df582c9b4ee3874e36e58d9f53d4e214
+# Date:    Wed Jul 17 19:44:13 2013 +0200
+# Ident:   e81f2ed28d3a5b52045231c0700113b9349472fe
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -30,6 +30,7 @@
 # Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
 # Timo Benk : 2013-06-21 13:40:29 +0200 : speed optimization for resolve_target()
 # Timo Benk : 2013-07-08 15:59:06 +0200 : hostnames may be given via stdin
+# Timo Benk : 2013-07-12 15:13:08 +0200 : queue targets instead of splitting them
 #
 
 ###
@@ -191,32 +192,6 @@ sub merge {
     } 
 
     return { %$_h1, %$_h2 };
-}
-
-###
-# take all entries from @$_objects and distribute each entry evenly into
-# $_num new arrays.
-#
-# $_objects - the array to be splitted
-# $_num     - the number of arrays to be returned
-# <- a list of array references
-sub bunches {
-
-    my $_objects = shift;
-    my $_num     = shift;
-
-    my @bunches;
-    foreach my $idx (0..($_num-1)) {
-
-        $bunches[$idx] = [];
-    }
-
-    for (my $idx = 0; $idx < scalar(@{$_objects}); $idx++) {
-
-        push(@{$bunches[$idx % $_num]}, $_objects->[$idx]);
-    }
-
-    return @bunches;
 }
 
 1;

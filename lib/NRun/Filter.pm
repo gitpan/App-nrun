@@ -18,9 +18,9 @@
 #
 # Program: Filter.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Mon Jul 8 18:32:15 2013 +0200
-# Ident:   9aabc196df582c9b4ee3874e36e58d9f53d4e214
-# Branch:  HEAD, v1.1.1, origin/master, origin/HEAD, master
+# Date:    Wed Jul 17 19:44:13 2013 +0200
+# Ident:   e81f2ed28d3a5b52045231c0700113b9349472fe
+# Branch:  HEAD, v1.1.2, origin/master, origin/HEAD, master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
 # 

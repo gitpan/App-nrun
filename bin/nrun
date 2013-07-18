@@ -19,8 +19,8 @@
 #
 # Program: nrun
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Mon Jul 8 18:32:15 2013 +0200
-# Ident:   9aabc196df582c9b4ee3874e36e58d9f53d4e214
+# Date:    Wed Jul 17 19:44:13 2013 +0200
+# Ident:   e81f2ed28d3a5b52045231c0700113b9349472fe
 # Branch:  master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
@@ -71,6 +71,10 @@
 # Timo Benk : 2013-06-21 13:41:01 +0200 : handler() was missed sometimes
 # Timo Benk : 2013-06-21 14:03:21 +0200 : do not exit in handler() when in parent context
 # Timo Benk : 2013-07-08 15:59:06 +0200 : hostnames may be given via stdin
+# Timo Benk : 2013-07-10 14:44:38 +0200 : possible deadlock fixed when using --copy
+# Timo Benk : 2013-07-11 14:02:09 +0200 : better cleanup handling in signal handlers
+# Timo Benk : 2013-07-12 15:13:08 +0200 : queue targets instead of splitting them
+# Timo Benk : 2013-07-15 18:24:50 +0200 : nested signal handlers are not possible
 #
 
 package App::nrun;
@@ -99,6 +103,7 @@ use NRun::Signal;
 use NRun::Logger;
 use NRun::Pool;
 use NRun::Sink;
+use NRun::Queue;
 
 our $options = {};
 
@@ -317,15 +322,31 @@ sub parse_commandline {
 # ensure cleanup on TERM, INT and ALRM
 sub handler_cleanup {
 
-    my $_worker  = shift;
-    my $_command = shift;
-    my $_copy    = shift;
+    my $_worker = shift;
+    my $_file   = shift;
 
     $$_worker->end();
 
-    if (defined($$_copy)) {
+    if (defined($$_file)) {
 
-        $$_worker->delete($$_command);
+        eval {
+
+            local $SIG{ALRM} = sub { die("alarm\n"); };
+
+            alarm($options->{timeout});
+            $$_worker->delete($$_file);
+            alarm(0);
+        };
+        if ($@) {
+
+            if ($@ eq "alarm\n") {
+
+                $$_worker->kill();
+            } else {
+
+                die($@);
+            }
+        }
     }
 }
 
@@ -335,14 +356,13 @@ sub callback {
     
     my $_host = shift;
 
+    my $file   = undef;
     my $worker = NRun::Worker::workers()->{$options->{mode}}->{NAME}->new();
 
     # register signal handlers
-    my $command = $options->{command};
-
-    my $handler_term = NRun::Signal::register('TERM', \&handler_cleanup, [ \$worker, \$command, \$options->{copy} ]);
-    my $handler_int  = NRun::Signal::register('INT',  \&handler_cleanup, [ \$worker, \$command, \$options->{copy} ]);
-    my $handler_alrm = NRun::Signal::register('ALRM', \&handler_cleanup, [ \$worker, \$command, \$options->{copy} ]);
+    my $handler_term = NRun::Signal::register('TERM', \&handler_cleanup, [ \$worker, \$file ]);
+    my $handler_int  = NRun::Signal::register('INT',  \&handler_cleanup, [ \$worker, \$file ]);
+    my $handler_alrm = NRun::Signal::register('ALRM', \&handler_cleanup, [ \$worker ]);
 
     # initialize the worker object
     $worker->init (
@@ -379,6 +399,8 @@ sub callback {
     }
 
     # start the actual execution sequence
+    my $command = $options->{command};
+
     if (defined($options->{copy})) {
 
         my $source = $command;
@@ -390,6 +412,8 @@ sub callback {
             $worker->end();
             return;
         }
+
+        $file = $command;
     }
 
     $worker->execute($command, $options->{arguments});
@@ -449,6 +473,20 @@ sub sink_init() {
 }
 
 ###
+# initialize the queue object
+sub queue_init {
+
+    my $_self = shift;
+
+    $options->{queue} = NRun::Queue->new();
+    $options->{queue}->init (
+        {
+            objects => $options->{hosts},
+        }
+    );
+}
+
+###
 # main
 sub main {
 
@@ -468,14 +506,15 @@ sub main {
     parse_commandline();
 
     sink_init();
+    queue_init();
 
     $options->{pool} = NRun::Pool->new (
         {
             nmax    => $options->{parallel},
             timeout => $options->{timeout},
-            objects => $options->{hosts},
 
             sink => $options->{sink},
+            queue => $options->{queue},
 
             callback => \&callback,
         }

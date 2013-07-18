@@ -18,9 +18,9 @@
 #
 # Program: Worker.pm
 # Author:  Timo Benk <benk@b1-systems.de>
-# Date:    Mon Jul 8 18:32:15 2013 +0200
-# Ident:   9aabc196df582c9b4ee3874e36e58d9f53d4e214
-# Branch:  HEAD, v1.1.1, origin/master, origin/HEAD, master
+# Date:    Wed Jul 17 19:44:13 2013 +0200
+# Ident:   e81f2ed28d3a5b52045231c0700113b9349472fe
+# Branch:  HEAD, v1.1.2, origin/master, origin/HEAD, master
 #
 # Changelog:--reverse --grep '^tags.*relevant':-1:%an : %ai : %s
 # 
@@ -38,6 +38,7 @@
 # Timo Benk : 2013-06-13 13:59:01 +0200 : process output handling refined
 # Timo Benk : 2013-06-14 12:38:19 +0200 : open3 will never return undef
 # Timo Benk : 2013-06-20 19:33:33 +0200 : raise condition in signal handling code fixed
+# Timo Benk : 2013-07-11 14:02:09 +0200 : better cleanup handling in signal handlers
 #
 
 ###
@@ -162,15 +163,24 @@ sub init {
 }
 
 ###
+# kill the currently running command
+sub kill {
+
+    my $_self = shift;
+
+    if ($_self->{pid} ne "n/a") {
+
+        kill(KILL => $_self->{pid});
+    }
+}
+
+###
 # SIGTERM signal handler.
 sub handler_term {
 
     my $_self = shift;
 
-    if ($$_self->{pid} ne "n/a") {
-
-        kill(KILL => $$_self->{pid});
-    }
+    $$_self->kill();
 
     print {$$_self->{O}} "$$_self->{hostname};stdout;" . time() . ";$$;$$_self->{pid};exit;\"exit code $NRun::Constants::CODE_SIGTERM;\"\n";
     print {$$_self->{E}} "$$_self->{hostname};stderr;" . time() . ";$$;$$_self->{pid};error;\"SIGTERM received\"\n";
@@ -182,10 +192,7 @@ sub handler_int {
 
     my $_self = shift;
 
-    if ($$_self->{pid} ne "n/a") {
-
-        kill(KILL => $$_self->{pid});
-    } 
+    $$_self->kill();
 
     print {$$_self->{O}} "$$_self->{hostname};stdout;" . time() . ";$$;$$_self->{pid};exit;\"exit code $NRun::Constants::CODE_SIGINT;\"\n";
     print {$$_self->{E}} "$$_self->{hostname};stderr;" . time() . ";$$;$$_self->{pid};error;\"SIGINT received\"\n";
@@ -198,10 +205,7 @@ sub handler_alrm {
 
     my $_self = shift;
 
-    if ($$_self->{pid} ne "n/a") {
-
-        kill(KILL => $$_self->{pid});
-    }
+    $$_self->kill();
 
     print {$$_self->{O}} "$$_self->{hostname};stdout;" . time() . ";$$;$$_self->{pid};exit;\"exit code $NRun::Constants::CODE_SIGALRM;\"\n";
     print {$$_self->{E}} "$$_self->{hostname};stderr;" . time() . ";$$;$$_self->{pid};error;\"SIGALRM received\"\n";
